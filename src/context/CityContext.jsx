@@ -1,15 +1,23 @@
-import { createContext, useState, useEffect, useContext } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 
 const CityContext = createContext()
 
-export function CityProvider({ children }) {
-  const [city, setCity] = useState(() => {
-    return localStorage.getItem('city') || ''
+export const CityProvider = ({ children }) => {
+  const [city, setCityState] = useState(() => {
+    return localStorage.getItem('city') || null
   })
 
+  const setCity = (newCity) => {
+    setCityState(newCity)
+    localStorage.setItem('city', newCity)
+  }
+
+  // Optional: fallback to default city if none is set after mount
   useEffect(() => {
-    localStorage.setItem('city', city)
-  }, [city])
+    if (!city) {
+      setCity('Toronto') // or show modal selector instead
+    }
+  }, [])
 
   return (
     <CityContext.Provider value={{ city, setCity }}>
@@ -18,6 +26,4 @@ export function CityProvider({ children }) {
   )
 }
 
-export function useCity() {
-  return useContext(CityContext)
-}
+export const useCity = () => useContext(CityContext)

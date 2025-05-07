@@ -18,6 +18,41 @@ import FeedbackForm from './components/FeedbackForm'
 import EventsPage from './pages/EventsPage'
 import TermsPage from './pages/TermsPage'
 import Leaderboard from './pages/Leaderboard'
+import { useCity } from './context/CityContext'
+import { useEffect, useState } from 'react'
+
+function CitySelectorModal() {
+  const { city, setCity } = useCity()
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (!city) setVisible(true)
+  }, [city])
+
+  const handleSelect = (e) => {
+    setCity(e.target.value)
+    setVisible(false)
+  }
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded shadow">
+        <h2 className="mb-4 text-xl font-bold">Choose Your City</h2>
+        <select onChange={handleSelect} className="w-full p-2 rounded">
+          <option>Select a city</option>
+          <option value="Toronto">Toronto</option>
+          <option value="Vancouver">Vancouver</option>
+          <option value="Montreal">Montreal</option>
+          <option value="Calgary">Calgary</option>
+          {/* Add more */}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 
 function EventCard({ event }) {
   return (
