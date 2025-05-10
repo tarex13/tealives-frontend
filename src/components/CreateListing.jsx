@@ -1,172 +1,318 @@
-import { useState } from 'react'
-import axios from 'axios'
-import { useCity } from '../context/CityContext'
-import { useAuth } from '../context/AuthContext'
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useCity } from '../context/CityContext';
+import { useAuth } from '../context/AuthContext';
+import { createListing } from '../requests';
 
-import api from '../api'
+const CATEGORY_OPTIONS = [
+  { label: '📱 Electronics', value: 'Electronics' },
+  { label: '👕 Clothing', value: 'Clothing' },
+  { label: '🛋️ Furniture', value: 'Furniture' },
+  { label: '📚 Books', value: 'Books' },
+  { label: '🧸 Toys', value: 'Toys' },
+  { label: '🎁 Other', value: 'Other' },
+];
 
-function CreateListing({ onListingCreated }) {
-  const { city } = useCity()
-  const { user } = useAuth()
+const DELIVERY_OPTIONS = [
+  { value: 'pickup', label: 'Pickup (Meet in Person)' },
+  { value: 'dropoff', label: 'Drop-off Available' },
+  { value: 'shipping', label: 'Shipping (Buyer Pays)' },
+  { value: 'meetup', label: 'Meet in Public (Safe Location)' },
+];
+
+function CreateListing() {
+  const { city } = useCity();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [form, setForm] = useState({
     title: '',
     description: '',
     price: '',
-    category: '',
-    is_swappable: false,
-    image: null,
-    delivery_options: 'pickup', 
-    delivery_note: '',         
-    swapp_wishlist: '',
-  })
+    category: CATEGORY_OPTIONS[0].value,
+    delivery_option: DELIVERY_OPTIONS[0].value,
+    delivery_note: '',
+    files: [],
+    previews: [],
+  });
 
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentPreview, setCurrentPreview] = useState(0);
 
-  const updateForm = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === 'delivery_option') {
+      const selected = DELIVERY_OPTIONS.find(opt => opt.value === value);
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+        delivery_note: selected ? selected.label : '',
+      }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`${file.name} is too large (max 10MB).`);
+        return false;
+      }
+      if (!file.type.startsWith('image') && !file.type.startsWith('video')) {
+        alert(`${file.name} is not a supported file type.`);
+        return false;
+      }
+      return true;
+    });
+
+    const uniqueFiles = validFiles.filter(
+      (file) => !form.files.some((f) => f.name === file.name && f.size === file.size)
+    );
+
+    const previews = uniqueFiles.map((file) => URL.createObjectURL(file));
+
+    setForm((prev) => ({
+      ...prev,
+      files: [...prev.files, ...uniqueFiles],
+      previews: [...prev.previews, ...previews],
+    }));
+
+    setCurrentPreview(form.previews.length);
+  };
+
+  const removeFile = (index) => {
+    const newFiles = [...form.files];
+    const newPreviews = [...form.previews];
+    newFiles.splice(index, 1);
+    newPreviews.splice(index, 1);
+    setForm((prev) => ({
+      ...prev,
+      files: newFiles,
+      previews: newPreviews,
+    }));
+    setCurrentPreview(0);
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
 
-    const data = new FormData()
-    Object.entries(form).forEach(([key, value]) => {
-      if (value !== null) data.append(key, value)
-    })
-    data.append('city', city)
+    if (form.title.length < 3) return setError('Title must be at least 3 characters.');
+    if (form.price <= 0) return setError('Price must be greater than 0.');
+
+    setError(null);
+    setSuccess(null);
+    setSubmitting(true);
+    setUploadProgress(0);
+
+    const formData = new FormData();
+    formData.append('title', form.title);
+    formData.append('description', form.description);
+    formData.append('price', form.price);
+    formData.append('category', form.category);
+    formData.append('delivery_options', form.delivery_option);
+    formData.append('delivery_note', form.delivery_note);
+
+    form.files.forEach((file) => {
+      formData.append('images', file);
+    });
 
     try {
-      const res = await api.post(
-        `${import.meta.env.VITE_API_BASE_URL}marketplace/`,
-        data,
-        {
-          headers: {
-            Authorization: `Bearer ${user.access}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      )
+      await createListing(formData, (progressEvent) => {
+        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setUploadProgress(progress);
+      });
 
-      if (onListingCreated) onListingCreated(res.data)
+      setSuccess('🎉 Listing created successfully!');
       setForm({
         title: '',
         description: '',
         price: '',
-        category: '',
-        is_swappable: false,
-        image: null,
-        delivery_options: 'pickup',
+        category: CATEGORY_OPTIONS[0].value,
+        delivery_option: DELIVERY_OPTIONS[0].value,
         delivery_note: '',
-      })
+        files: [],
+        previews: [],
+      });
+      setCurrentPreview(0);
+      setTimeout(() => navigate('/marketplace'), 2000);
     } catch (err) {
-      console.error('Failed to create listing', err)
+      console.error('Failed to create listing:', err);
+      setError('Could not create listing. Please try again.');
     } finally {
-      setLoading(false)
+      setSubmitting(false);
+      setUploadProgress(0);
     }
+  };
+
+  if (!user) {
+    return <p className="text-red-600 text-center mt-10">You must be logged in to create a listing.</p>;
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
-      <h2 className="text-xl font-bold mb-4">Create New Listing</h2>
+    <div className="max-w-xl mx-auto p-4 bg-white shadow rounded">
+      <h1 className="text-2xl font-bold mb-4 text-center">Create a New Listing</h1>
 
-      <input
-        type="text"
-        placeholder="Title"
-        value={form.title}
-        onChange={(e) => updateForm('title', e.target.value)}
-        className="w-full mb-3 p-2 border rounded"
-        required
-      />
+      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-center">{error}</div>}
+      {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center">{success}</div>}
 
-      <textarea
-        placeholder="Description"
-        value={form.description}
-        onChange={(e) => updateForm('description', e.target.value)}
-        className="w-full mb-3 p-2 border rounded"
-        required
-      />
-
-      <input
-        type="number"
-        placeholder="Price"
-        value={form.price}
-        onChange={(e) => updateForm('price', e.target.value)}
-        className="w-full mb-3 p-2 border rounded"
-        required
-      />
-
-      <input
-        type="text"
-        placeholder="Category (e.g. electronics, books)"
-        value={form.category}
-        onChange={(e) => updateForm('category', e.target.value)}
-        className="w-full mb-3 p-2 border rounded"
-      />
-
-      <label className="block mb-3">
+      <form onSubmit={handleSubmit} className="space-y-4 relative">
         <input
-          type="checkbox"
-          checked={form.is_swappable}
-          onChange={(e) => updateForm('is_swappable', e.target.checked)}
-          className="mr-2"
-        />
-        Swappable?
-      </label>
-      {form.is_swappable && (
-  <label className="block mb-3">
-    Wishlist (what would you swap for?)
-    <input
-      type="text"
-      value={form.swapp_wishlist}
-      onChange={(e) => updateForm('swapp_wishlist', e.target.value)}
-      placeholder="e.g. headphones, books, plants"
-      className="w-full border p-2 rounded mt-1"
-    />
-  </label>
-)}
-      <label className="block mb-3">
-        Delivery Option
-        <select
-          value={form.delivery_options}
-          onChange={(e) => updateForm('delivery_options', e.target.value)}
-          className="w-full border p-2 rounded mt-1"
-        >
-          <option value="pickup">Local Pickup</option>
-          <option value="dropoff">Drop-off Available</option>
-          <option value="shipping">Shipping</option>
-          <option value="meetup">Meet in Public</option>
-        </select>
-      </label>
-
-      <label className="block mb-3">
-        Delivery Notes (optional)
-        <textarea
-          value={form.delivery_note}
-          onChange={(e) => updateForm('delivery_note', e.target.value)}
+          type="text"
+          name="title"
+          placeholder="Title"
           className="w-full border p-2 rounded"
+          value={form.title}
+          onChange={handleChange}
+          required
         />
-      </label>
 
-      <label className="block mb-4">
-        Upload Image
+        <textarea
+          name="description"
+          placeholder="Description"
+          className="w-full border p-2 rounded"
+          rows={4}
+          value={form.description}
+          onChange={handleChange}
+          required
+        />
+
         <input
-          type="file"
-          onChange={(e) => updateForm('image', e.target.files[0])}
-          className="mt-1"
+          type="number"
+          name="price"
+          placeholder="Price"
+          className="w-full border p-2 rounded"
+          value={form.price}
+          onChange={handleChange}
+          required
         />
-      </label>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-      >
-        {loading ? 'Posting...' : 'Post Listing'}
-      </button>
-    </form>
-  )
+        {/* Category Selector */}
+        <select
+          name="category"
+          value={form.category}
+          onChange={handleChange}
+          className="w-full border p-2 rounded bg-white"
+        >
+          {CATEGORY_OPTIONS.map((cat) => (
+            <option key={cat.value} value={cat.value}>
+              {cat.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Delivery Options */}
+        <select
+          name="delivery_option"
+          value={form.delivery_option}
+          onChange={handleChange}
+          className="w-full border p-2 rounded bg-white"
+        >
+          {DELIVERY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Delivery Note */}
+        <textarea
+          name="delivery_note"
+          placeholder="Optional Delivery Note (e.g., I can meet downtown at noon)"
+          className="w-full border p-2 rounded"
+          rows={2}
+          value={form.delivery_note}
+          onChange={handleChange}
+        />
+
+        <label className="block w-full p-4 text-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50">
+          <span className="text-gray-600">Click or Drag & Drop Files Here</span>
+          <input
+            type="file"
+            name="images"
+            accept="image/*,video/*"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </label>
+
+        {/* Media Preview */}
+        {form.previews.length > 0 && (
+          <>
+            <div className="relative w-full h-64 bg-gray-100 rounded overflow-hidden flex items-center justify-center mb-4">
+              {form.files[currentPreview]?.type.startsWith('video') ? (
+                <video src={form.previews[currentPreview]} controls className="max-h-full max-w-full object-contain" />
+              ) : (
+                <img src={form.previews[currentPreview]} alt="Preview" className="max-h-full max-w-full object-contain" />
+              )}
+              <button
+                type="button"
+                onClick={() => setCurrentPreview((prev) => (prev - 1 + form.previews.length) % form.previews.length)}
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPreview((prev) => (prev + 1) % form.previews.length)}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
+              >
+                ▶
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-center">
+              {form.previews.map((preview, idx) => (
+                <div key={idx} className="relative">
+                  <img
+                    src={preview}
+                    alt="Thumbnail"
+                    className={`w-20 h-20 object-cover border-2 rounded cursor-pointer ${
+                      currentPreview === idx ? 'border-blue-500' : 'border-gray-300'
+                    }`}
+                    onClick={() => setCurrentPreview(idx)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeFile(idx)}
+                    className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 text-xs hover:bg-red-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {submitting && (
+          <div className="flex flex-col items-center space-y-2 mt-4">
+            <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
+            <div className="w-full bg-gray-200 rounded-full h-4">
+              <div
+                className="bg-blue-600 h-4 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-gray-700">{uploadProgress}%</p>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition disabled:opacity-50"
+        >
+          {submitting ? 'Posting...' : 'Post Listing'}
+        </button>
+      </form>
+    </div>
+  );
 }
 
-export default CreateListing
+export default CreateListing;

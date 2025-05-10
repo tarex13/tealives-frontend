@@ -1,114 +1,94 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from '../context/AuthContext'
-import axios from 'axios'
-import api from '../api'
+// SwappModal.js
+import React, { useState, useEffect } from 'react';
+import api from '../api';
+import { useAuth } from '../context/AuthContext';
+import { sendSwappOffer } from '../requests';
 
 function SwappModal({ targetItem, onClose }) {
-  const { user } = useAuth()
-  const [myItems, setMyItems] = useState([])
-  const [offerItem, setOfferItem] = useState(null)
-  const [cashDiff, setCashDiff] = useState('')
-  const [message, setMessage] = useState('')
+  const { user } = useAuth();
+  const [myItems, setMyItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [cashDifference, setCashDifference] = useState(0);
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const loadMyItems = async () => {
-      const res = await api.get(`${import.meta.env.VITE_API_BASE_URL}marketplace/`, {
-        headers: { Authorization: `Bearer ${user.access}` },
-      })
-      const owned = res.data.filter(i => i.seller === user.user.id && i.is_swappable)
-      setMyItems(owned)
-    }
-
-    loadMyItems()
-  }, [])
-
-  // Basic keyword-based match
-  const matched = targetItem.swapp_wishlist
-    ?.toLowerCase()
-    .split(',')
-    .map((w) => w.trim())
-
-  const getMatchScore = (title) =>
-    matched?.reduce((score, tag) => (title.toLowerCase().includes(tag) ? score + 1 : score), 0) || 0
-
-  const sortedItems = myItems.sort((a, b) =>
-    getMatchScore(b.title) - getMatchScore(a.title)
-  )
+    const loadItems = async () => {
+      const res = await api.get(`marketplace/?seller=${user.user.id}`);
+      setMyItems(res.data.results || []);
+    };
+    loadItems();
+  }, [user]);
 
   const submitOffer = async () => {
+    setSubmitting(true);
     try {
-      const res = await api.post(
-        `${import.meta.env.VITE_API_BASE_URL}swapp/offer/`,
-        {
-          item: targetItem.id,
-          offered_item: offerItem,
-          cash_difference: cashDiff,
-          message,
-        },
-        {
-          headers: { Authorization: `Bearer ${user.access}` },
-        }
-      )
-      alert('Offer sent!')
-      onClose()
+      await sendSwappOffer({
+        item: targetItem.id,
+        offered_item: selectedItem,
+        cash_difference: cashDifference,
+        message,
+      });
+      alert('Offer Sent Successfully!');
+      onClose();
     } catch (err) {
-      console.error('Failed to submit offer', err)
-      alert('Error sending offer.')
+      alert('Error submitting offer.');
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded shadow max-w-lg w-full">
-        <h2 className="text-lg font-bold mb-2">Propose Swapp</h2>
-        <p className="mb-4">
-          You’re offering to trade for: <strong>{targetItem.title}</strong>
-        </p>
-
-        <label className="block mb-2 font-semibold">Choose one of your items:</label>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+      <div className="bg-white p-4 rounded shadow max-w-md w-full">
+        <h2 className="text-xl font-bold mb-4">Propose a Swapp</h2>
         <select
-          value={offerItem || ''}
-          onChange={(e) => setOfferItem(e.target.value)}
-          className="w-full mb-4 border p-2 rounded"
+          value={selectedItem || ''}
+          onChange={(e) => setSelectedItem(e.target.value)}
+          className="w-full border p-2 rounded mb-2"
         >
-          <option value="">-- Select an item --</option>
-          {sortedItems.map((item) => (
+          <option value="">Select an Item to Offer</option>
+          {myItems.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.title} {getMatchScore(item.title) > 0 && '💡'}
+              {item.title}
             </option>
           ))}
         </select>
 
-        <label className="block mb-2">Add Cash Difference (optional):</label>
         <input
           type="number"
-          value={cashDiff}
-          onChange={(e) => setCashDiff(e.target.value)}
-          className="w-full mb-4 border p-2 rounded"
+          placeholder="Cash Difference (Optional)"
+          value={cashDifference}
+          onChange={(e) => setCashDifference(e.target.value)}
+          className="w-full border p-2 rounded mb-2"
         />
 
-        <label className="block mb-2">Message (optional):</label>
         <textarea
+          placeholder="Optional Message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          className="w-full mb-4 border p-2 rounded"
-        />
+          className="w-full border p-2 rounded mb-2"
+          rows={3}
+        ></textarea>
 
         <div className="flex justify-between">
-          <button onClick={onClose} className="px-4 py-2 border rounded">
+          <button
+            onClick={onClose}
+            className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+          >
             Cancel
           </button>
           <button
             onClick={submitOffer}
-            disabled={!offerItem}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
+            disabled={submitting}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
-            Send Offer
+            {submitting ? 'Sending...' : 'Send Offer'}
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default SwappModal
+export default SwappModal;

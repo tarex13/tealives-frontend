@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 import api from '../api'
+import React from 'react'
 
 function SwappOfferCard({ offer }) {
   const [status, setStatus] = useState(offer.status)
@@ -8,13 +9,7 @@ function SwappOfferCard({ offer }) {
   const handleUpdate = async (newStatus) => {
     const user = JSON.parse(localStorage.getItem('user'))
     try {
-      await api.patch(
-        `${import.meta.env.VITE_API_BASE_URL}swapp/offer/${offer.id}/`,
-        { status: newStatus },
-        {
-          headers: { Authorization: `Bearer ${user.access}` },
-        }
-      )
+      await api.patch(`swapp/offer/${offer.id}/`, { status: newStatus })
       setStatus(newStatus)
     } catch (err) {
       alert('Failed to update offer')

@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import React from 'react'
 import api from '../api'
 
 function ModPanel() {
   const [reports, setReports] = useState([])
 
   const loadReports = async () => {
-    const user = JSON.parse(localStorage.getItem('user'))
     try {
-      const res = await api.get(`${import.meta.env.VITE_API_BASE_URL}reports/`, {
-        headers: { Authorization: `Bearer ${user.access}` },
-      })
+      const res = await api.get('reports/')
       setReports(res.data)
     } catch (err) {
       console.error('Error loading reports', err)
@@ -18,14 +15,8 @@ function ModPanel() {
   }
 
   const handleAction = async (id, action) => {
-    const user = JSON.parse(localStorage.getItem('user'))
     try {
-      await api.patch(`${import.meta.env.VITE_API_BASE_URL}report/${id}/`, {
-        action,
-      }, {
-        headers: { Authorization: `Bearer ${user.access}` },
-      })
-      // Remove from list once handled
+      await api.patch(`report/${id}/`, { action })
       setReports((prev) => prev.filter((r) => r.id !== id))
     } catch (err) {
       alert('Action failed')
@@ -43,13 +34,11 @@ function ModPanel() {
         <p>No pending reports 🎉</p>
       ) : (
         reports.map((report) => (
-          <div key={report.id} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-4 rounded shadow mb-4">
-            <p className="text-sm mb-1">
-              <strong>{report.content_type.toUpperCase()}</strong> ID {report.content_id} reported by user ID {report.reported_by}
+          <div key={report.id} className="bg-white p-4 rounded shadow mb-4">
+            <p className="text-sm">
+              <strong>{report.content_type.toUpperCase()}</strong> ID {report.content_id} reported by user {report.reported_by}
             </p>
             <p className="mb-2"><strong>Reason:</strong> {report.reason}</p>
-
-            
             <p className="text-sm italic text-gray-500 mb-3">
               Preview: {report.content_snippet || 'N/A'}
             </p>

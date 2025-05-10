@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useCity } from '../context/CityContext'
+import React from 'react'
 
 function CitySelectorModal() {
   const { city, setCity } = useCity()
@@ -29,10 +30,10 @@ function CitySelectorModal() {
           defaultValue="Select"
         >
           <option disabled value="Select">Select</option>
-          <option value="Toronto">Toronto</option>
-          <option value="Vancouver">Vancouver</option>
-          <option value="Calgary">Calgary</option>
-          <option value="Montreal">Montreal</option>
+          <option value="toronto">Toronto</option>
+          <option value="vancouver">Vancouver</option>
+          <option value="calgary">Calgary</option>
+          <option value="montreal">Montreal</option>
         </select>
       </div>
     </div>

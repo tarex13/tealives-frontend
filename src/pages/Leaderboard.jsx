@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import React from 'react'
 import api from '../api'
 import { useCity } from '../context/CityContext'
 
@@ -9,7 +10,7 @@ function Leaderboard() {
 
   useEffect(() => {
     const load = async () => {
-      const res = await api.get(`${import.meta.env.VITE_API_BASE_URL}leaderboard/?city=${city}`)
+      const res = await api.get(`leaderboard/?city=${city}`)
       setLeaders(res.data)
     }
     load()

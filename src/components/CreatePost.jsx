@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { createPost } from '../api/posts'
+import { createPost } from '../requests'
+import React from 'react'
 
 function CreatePost({ onPostCreated }) {
   const [form, setForm] = useState({
@@ -7,6 +8,7 @@ function CreatePost({ onPostCreated }) {
     content: '',
     post_type: 'discussion',
     anonymous: false,
+    poll_options: [''],
   })
 
   const [error, setError] = useState(null)
@@ -17,13 +19,24 @@ function CreatePost({ onPostCreated }) {
     setForm({ ...form, [name]: type === 'checkbox' ? checked : value })
   }
 
+  const handlePollOptionChange = (index, value) => {
+    const newOptions = [...form.poll_options];
+    newOptions[index] = value;
+    setForm({ ...form, poll_options: newOptions });
+  };
+
+  
+  const addPollOption = () => {
+    setForm({ ...form, poll_options: [...form.poll_options, ''] });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     try {
       const newPost = await createPost(form)
       onPostCreated?.(newPost)
-      setForm({ title: '', content: '', post_type: 'discussion', anonymous: false })
+      setForm({ title: '', content: '', post_type: 'discussion', anonymous: false,  poll_options: [''], })
       setError(null)
     } catch (err) {
       setError('Failed to create post.')
@@ -65,6 +78,7 @@ function CreatePost({ onPostCreated }) {
           <option value="alert">Alert</option>
           <option value="question">Question</option>
           <option value="rant">Rant</option>
+          <option value="poll">Poll</option>
         </select>
         <label className="text-sm flex items-center gap-1">
           <input
@@ -76,6 +90,29 @@ function CreatePost({ onPostCreated }) {
           Post anonymously
         </label>
       </div>
+      {form.post_type === 'poll' && (
+        <div className="mb-2">
+          <h4 className="font-medium mb-1">Poll Options:</h4>
+          {form.poll_options.map((opt, idx) => (
+            <input
+              key={idx}
+              type="text"
+              value={opt}
+              onChange={(e) => handlePollOptionChange(idx, e.target.value)}
+              placeholder={`Option ${idx + 1}`}
+              className="w-full border p-2 rounded mb-1"
+              required
+            />
+          ))}
+          <button
+            type="button"
+            onClick={addPollOption}
+            className="text-xs text-blue-600 mt-1"
+          >
+            + Add Option
+          </button>
+        </div>
+      )}
       <button
         type="submit"
         disabled={loading}

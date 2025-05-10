@@ -1,20 +1,23 @@
-import { useEffect, useState } from 'react'
-import { fetchListings } from '../api/marketplace'
+import React, { useEffect, useState } from 'react'
+import { fetchMarketplace } from '../requests'
 import MarketplaceCard from './MarketplaceCard'
 import { useAuth } from '../context/AuthContext'
-import CreateListing from '../components/CreateListing'
-
+import { useCity } from '../context/CityContext'
+import { Link } from 'react-router-dom'
 
 function Marketplace() {
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
   const { user } = useAuth()
+  const { city } = useCity()
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true)
       try {
-        const data = await fetchListings()
-        const filtered = data.filter(item => item.status === 'available' && item.listing_location === user?.city)
+        const res = await fetchMarketplace(city)
+        const list = Array.isArray(res.results) ? res.results : []
+        const filtered = list.filter(item => item.status === 'available')
         setListings(filtered)
       } catch (err) {
         console.error('Failed to load listings:', err)
@@ -22,21 +25,32 @@ function Marketplace() {
         setLoading(false)
       }
     }
-    load()
-  }, [user])
+  
+    if (city) {
+      load()
+    }
+  }, [city])
+  
 
   return (
     <div className="max-w-3xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Marketplace</h1>
-      {user && (
-    <CreateListing onListingCreated={(newItem) => setListings([newItem, ...listings])} />
-  )}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Marketplace ({city})</h1>
+        {user && (
+          <Link
+            to="/marketplace/create"
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+          >
+            + New Listing
+          </Link>
+        )}
+      </div>
+
       {loading ? (
-        <p>Loading listings...</p>
+        <p className="text-gray-500">Loading listings...</p>
       ) : listings.length === 0 ? (
-        <p>No items available in your area.</p>
+        <p className="text-gray-500">No items available in your area.</p>
       ) : (
-        
         listings.map((item) => <MarketplaceCard key={item.id} item={item} />)
       )}
     </div>

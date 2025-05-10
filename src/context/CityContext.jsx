@@ -1,4 +1,6 @@
+import React from 'react'
 import { createContext, useContext, useState, useEffect } from 'react'
+import CitySelector from '../components/CitySelector' // Make sure this path is correct
 
 const CityContext = createContext()
 
@@ -12,15 +14,14 @@ export const CityProvider = ({ children }) => {
     localStorage.setItem('city', newCity)
   }
 
-  // Optional: fallback to default city if none is set after mount
   useEffect(() => {
-    if (!city) {
-      setCity('Toronto') // or show modal selector instead
-    }
-  }, [])
+    // Optional logging or analytics can go here
+  }, [city])
 
   return (
     <CityContext.Provider value={{ city, setCity }}>
+      {/* Show CitySelector only if no city is set */}
+      {!city && <CitySelector />}
       {children}
     </CityContext.Provider>
   )

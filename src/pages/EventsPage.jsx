@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useCity } from '../context/CityContext'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
@@ -8,14 +8,29 @@ function EventsPage() {
   const { city } = useCity()
   const { user } = useAuth()
   const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const navigate = useNavigate()
 
   const loadEvents = async () => {
+    setLoading(true)
+    setError(null)
     try {
       const res = await api.get(`events/?city=${city}`)
-      setEvents(res.data)
+
+      let eventList = []
+      if (Array.isArray(res.data)) {
+        eventList = res.data
+      } else if (Array.isArray(res.data?.results)) {
+        eventList = res.data.results
+      }
+
+      setEvents(eventList)
     } catch (err) {
       console.error('Error loading events:', err)
+      setError('Failed to load events. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -30,16 +45,26 @@ function EventsPage() {
         {user && (
           <button
             onClick={() => navigate('/events/create')}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
           >
             + Create Event
           </button>
         )}
       </div>
 
-      {events.length === 0 ? (
+      {loading && <p className="text-gray-500">Loading events...</p>}
+
+      {error && (
+        <div className="bg-red-100 text-red-700 p-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      {!loading && events.length === 0 && !error && (
         <p>No events found.</p>
-      ) : (
+      )}
+
+      {Array.isArray(events) &&
         events.map((event) => (
           <Link
             key={event.id}
@@ -50,10 +75,11 @@ function EventsPage() {
             <p className="text-sm text-gray-600">
               {new Date(event.datetime).toLocaleString()} @ {event.location}
             </p>
-            <p className="text-sm mt-1">{event.description.slice(0, 80)}...</p>
+            <p className="text-sm mt-1">
+              {event.description ? event.description.slice(0, 80) + '...' : ''}
+            </p>
           </Link>
-        ))
-      )}
+        ))}
     </div>
   )
 }

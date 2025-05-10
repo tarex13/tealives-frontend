@@ -1,3 +1,4 @@
+import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NotificationDropdown from './NotificationDropdown'
@@ -9,7 +10,7 @@ function Navbar() {
   const [darkMode, setDarkMode] = useDarkMode()
 
   return (
-    <nav className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow px-4 py-2 flex justify-between items-center">
+    <nav style={{zIndex: '1', position: 'absolute', left: '0', width:'100%'}} className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow px-4 py-2 flex justify-between items-center">
       <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
         <Link to="/">Tealives</Link>
       </div>
@@ -18,6 +19,7 @@ function Navbar() {
         <Link to="/" className="hover:underline">Home</Link>
         <Link to="/marketplace" className="hover:underline">Marketplace</Link>
         <Link to="/events" className="hover:underline">Events</Link>
+        <Link to="/groups" className="px-4 py-2 hover:underline">Groups</Link>
         {user && <Link to="/profile" className="hover:underline">My Profile</Link>}
         {user && <Link to="/inbox" className="hover:underline">Inbox</Link>}
         <Link to="/feedback">Feedback</Link>
@@ -25,15 +27,26 @@ function Navbar() {
         <Link to="/leaderboard">Leaderboard</Link>
         
         {user && <Link to="/saved">Saved</Link>}
+        {user && <Link to="/profile/edit">Edit Profile</Link>}
         {user && <NotificationDropdown />}
-
+        {user?.is_staff || user?.is_moderator ? (
+          <Link to="/mod/feedback" className="text-red-600 font-semibold">
+            Feedback Admin
+          </Link>
+        ) : null}
         <button
           onClick={() => setDarkMode(!darkMode)}
           className="ml-2 text-xs px-2 py-1 border rounded dark:border-gray-600"
         >
           {darkMode ? '☀️ Light' : '🌙 Dark'}
         </button>
-
+        {user?.user?.profile_image && (
+  <img
+    src={user.user.profile_image}
+    alt="Profile"
+    className="w-8 h-8 rounded-full object-cover"
+  />
+)}
         {user ? (
           <button
             onClick={logoutUser}

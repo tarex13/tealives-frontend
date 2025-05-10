@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { fetchThread, sendMessage } from '../requests'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { fetchGroupMessages, sendGroupMessage, markGroupMessagesRead } from '../requests'
 
-function MessageThread({ userId, recipientName, currentUserId }) {
+function GroupChatThread({ groupId, groupName, currentUserId }) {
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
-  const [typing, setTyping] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [typingUsers, setTypingUsers] = useState(new Set())
   const ws = useRef(null)
   const messagesEndRef = useRef(null)
 
@@ -17,21 +16,21 @@ function MessageThread({ userId, recipientName, currentUserId }) {
   }
 
   useEffect(() => {
-    const load = async () => {
+    const loadMessages = async () => {
       try {
-        const res = await fetchThread(userId)
+        const res = await fetchGroupMessages(groupId)
         setMessages(res)
-      } catch {
-        setMessages([])
-      } finally {
-        setLoading(false)
+        // ✅ Mark messages as read when user opens chat
+        await markGroupMessagesRead(groupId)
+      } catch (err) {
+        console.error('Failed to fetch group messages:', err)
       }
     }
-    load()
-  }, [userId])
+    loadMessages()
+  }, [groupId])
 
   useEffect(() => {
-    ws.current = new WebSocket(`ws://localhost:8000/ws/chat/${userId}/?token=${token}`)
+    ws.current = new WebSocket(`ws://localhost:8000/ws/group/${groupId}/?token=${token}`)
 
     ws.current.onopen = () => console.log('WebSocket connected')
     ws.current.onclose = () => console.log('WebSocket disconnected')
@@ -39,9 +38,15 @@ function MessageThread({ userId, recipientName, currentUserId }) {
     ws.current.onmessage = (e) => {
       const data = JSON.parse(e.data)
 
-      if (data.typing && data.sender_id === userId) {
-        setTyping(true)
-        setTimeout(() => setTyping(false), 3000)
+      if (data.typing) {
+        setTypingUsers(prev => new Set(prev.add(data.sender_id)))
+        setTimeout(() => {
+          setTypingUsers(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(data.sender_id)
+            return newSet
+          })
+        }, 3000)
         return
       }
 
@@ -50,15 +55,15 @@ function MessageThread({ userId, recipientName, currentUserId }) {
         {
           content: data.message,
           is_own: data.sender_id === currentUserId,
+          sender_id: data.sender_id,
           sent_at: new Date().toISOString(),
         },
       ])
+      scrollToBottom()
     }
 
     return () => ws.current.close()
-  }, [userId, currentUserId, token])
-
-  useEffect(scrollToBottom, [messages])
+  }, [groupId, currentUserId, token])
 
   const handleSend = async () => {
     if (!content.trim()) return
@@ -68,16 +73,17 @@ function MessageThread({ userId, recipientName, currentUserId }) {
     }
 
     try {
-      await sendMessage(userId, content)
+      await sendGroupMessage(groupId, content)
     } catch (err) {
-      console.error('Failed to persist message via API:', err)
+      console.error('Failed to send group message via API:', err)
     }
 
     setMessages(prev => [
       ...prev,
-      { content, is_own: true, sent_at: new Date().toISOString() },
+      { content, is_own: true, sender_id: currentUserId, sent_at: new Date().toISOString() },
     ])
     setContent('')
+    scrollToBottom()
   }
 
   const handleTyping = () => {
@@ -88,12 +94,11 @@ function MessageThread({ userId, recipientName, currentUserId }) {
 
   return (
     <div className="p-4">
-      <h3 className="text-lg font-bold mb-2">Chat with {recipientName}</h3>
+      <h3 className="text-lg font-bold mb-2">Group: {groupName}</h3>
+
       <div className="border rounded h-64 overflow-y-auto p-2 mb-4 bg-gray-50">
-        {loading ? (
-          <p>Loading...</p>
-        ) : messages.length === 0 ? (
-          <p className="text-sm text-gray-500">No messages yet. Say hello!</p>
+        {messages.length === 0 ? (
+          <p className="text-sm text-gray-500">No messages yet. Start the conversation!</p>
         ) : (
           messages.map((m, i) => (
             <div
@@ -112,12 +117,19 @@ function MessageThread({ userId, recipientName, currentUserId }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {typing && <p className="text-xs text-gray-500 italic">User is typing...</p>}
+      {/* ✅ Typing Indicator */}
+      {typingUsers.size > 0 && (
+        <p className="text-xs text-gray-500 italic">
+          {Array.from(typingUsers).length === 1
+            ? 'Someone is typing...'
+            : 'Multiple users are typing...'}
+        </p>
+      )}
 
       <div className="flex gap-2 mt-2">
         <input
           className="flex-1 border rounded p-2"
-          placeholder="Type your message..."
+          placeholder="Type a message..."
           value={content}
           onChange={e => {
             setContent(e.target.value)
@@ -128,7 +140,7 @@ function MessageThread({ userId, recipientName, currentUserId }) {
           }}
         />
         <button
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+          className="bg-green-600 text-white px-4 py-2 rounded"
           onClick={handleSend}
         >
           Send
@@ -138,4 +150,4 @@ function MessageThread({ userId, recipientName, currentUserId }) {
   )
 }
 
-export default MessageThread
+export default GroupChatThread

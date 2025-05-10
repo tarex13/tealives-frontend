@@ -1,3 +1,4 @@
+import React from 'react'
 function TermsPage() {
     return (
       <div className="max-w-4xl mx-auto px-6 py-10 text-gray-800 dark:text-gray-100">

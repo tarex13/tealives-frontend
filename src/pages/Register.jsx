@@ -1,73 +1,88 @@
-import { useState } from 'react'
-import { register } from '../api/auth'
+// src/pages/Register.jsx
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { register } from '../requests'
 
 function Register() {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-  })
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState(null)
-  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
+  const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setError(null)
+
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.")
+      return
+    }
+
     try {
-      await register(formData)
+      setLoading(true)
+      await register({ email, password })
       navigate('/login')
     } catch (err) {
-      console.error('Registration error:', err)
+      console.error('Registration failed:', err)
       const msg =
-        err.response?.data?.error ||
-        err.response?.data?.username?.[0] ||
-        err.message ||
-        'Registration failed'
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        'Registration failed. Try a different email.'
       setError(msg)
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">Create Account</h2>
-      {error && <p className="text-red-500 mb-2">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="text"
-          name="username"
-          placeholder="Username"
-          value={formData.username}
-          onChange={handleChange}
-          className="w-full border p-2 rounded"
-          required
-        />
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleChange}
-          className="w-full border p-2 rounded"
-          required
-        />
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          value={formData.password}
-          onChange={handleChange}
-          className="w-full border p-2 rounded"
-          required
-        />
+    <div className="max-w-md mx-auto mt-10 p-4 bg-white rounded shadow">
+      <h1 className="text-xl font-semibold mb-4">Register</h1>
+
+      {error && <p className="text-red-600 mb-2">{error}</p>}
+
+      <form onSubmit={handleSubmit}>
+        <label className="block mb-2">
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border p-2 mt-1 rounded"
+            required
+          />
+        </label>
+
+        <label className="block mb-2">
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border p-2 mt-1 rounded"
+            required
+          />
+        </label>
+
+        <label className="block mb-4">
+          Confirm Password
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full border p-2 mt-1 rounded"
+            required
+          />
+        </label>
+
         <button
           type="submit"
-          className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
+          className="bg-green-600 text-white px-4 py-2 rounded w-full hover:bg-green-700 transition"
+          disabled={loading}
         >
-          Register
+          {loading ? 'Creating Account...' : 'Register'}
         </button>
       </form>
     </div>

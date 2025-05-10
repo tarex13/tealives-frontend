@@ -1,0 +1,189 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    box-sizing: border-box;
+    min-height: 100vh;
+}
+
+#form {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 2rem 0;
+    flex-direction: row;
+    width: 100%;
+    right: -50%;
+    top: 45%;
+    position: absolute;
+    transform: translate(-50%, -50%);
+}
+
+#form .across{
+    width: 100%;
+    position: absolute;
+    height: 6vw;
+    border-top: 1px solid #101828;
+    border-bottom: 1px solid #101828;
+    left: 0;
+}
+
+#form .half .moji {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+#form .Ok {
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    width: 100px;
+    height: 100px;
+    border-radius: 10px;
+    font-size: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 10px;
+    transform: rotate(-15deg);
+}
+
+#form .img .inside .outside {
+    text-align: center;
+    margin: 1rem 0;
+}
+
+#form .half {
+    width: 65%;
+    align-self: center;
+}
+
+#form .sign{
+    width: 55%;
+    z-index: 2;
+    text-align: right;
+    position: absolute;
+    left: 0;
+}
+
+#form .sign label{
+    font-size: 5vw;
+    color: #101828;
+}
+
+.form-section {
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+    backdrop-filter: blur(5px);
+    padding: 2rem;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 400px;
+    right: 15%;
+    top: 50%;
+    position: absolute;
+    transform: translate(0%, -50%);
+}
+
+#form input[type="text"],#form  input[type="password"],#form  input[type="email"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #fff;
+    border-radius: 5px;
+    background: transparent;
+    margin-bottom: 1rem;
+    color: #000;
+    border: 2px solid grey;
+}
+
+#form input:focus {
+    outline: none;
+    border-color: #FF9A3C;
+}
+
+#form button {
+    background: #FF9A3C;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 1rem;
+    transition: background 0.3s;
+}
+
+#form button:hover {
+    background: #FFC93C;
+}
+
+
+.fp{
+    padding: 2vh 0 0 0;
+
+}
+
+.form-slider {
+    position: absolute;
+    width: 100%;
+    max-width: 400px;
+    height: 500px;
+    margin: auto;
+    overflow: hidden;
+    right: 10%;
+    top: 50%;
+    transform: translate(0, -40%);
+    display: flex
+;
+  }
+  
+  .form-section {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+    z-index: 0;
+  }
+  
+  .form-section.active {
+    transform: translateX(0%);
+    opacity: 1;
+    z-index: 1;
+  }
+  
+  .form-section.login:not(.active) {
+    transform: translateX(-100%);
+  }
+  
+  .form-section.register:not(.active) {
+    transform: translateX(100%);
+  }
+  
+  .form-section.forgot:not(.active) {
+    transform: translateX(-100%);
+  }
+  
+  .forgot.active.forgot-adjust{
+    transform: translate(0, 25%);
+  }
+
+  .alt_signup{
+    display: flex;
+    flex-direction: row;
+  }
+   .alt_signup_cont{
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-top: 1px solid #101828;
+    margin: 15px;
+   }
+   .alt_signup{
+    display: flex;
+    justify-content: space-evenly;
+    width: 40%;
+    padding: 10px;
+   }
