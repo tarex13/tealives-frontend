@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { login, register } from '../requests';
 import { useAuth } from '../context/AuthContext';
 import { FaGoogle, FaFacebook } from 'react-icons/fa';
-import '../css/auth.css'; // Your existing CSS remains untouched
+import '../css/Auth.css'; // Your existing CSS remains untouched
 
 function AuthForm() {
   const [formType, setFormType] = useState('login'); // 'login', 'register', 'forgot'

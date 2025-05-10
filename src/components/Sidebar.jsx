@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Link, useNavigate } from 'react-router-dom'
 
 function Sidebar({ isOpen, toggleSidebar }) {
   const { user } = useAuth();
@@ -20,10 +21,15 @@ function Sidebar({ isOpen, toggleSidebar }) {
       >
         <h2 className="text-lg font-bold mb-4">Navigation</h2>
         <ul className="space-y-2">
-          <li><a href="/marketplace">Marketplace</a></li>
-          <li><a href="/events">Events</a></li>
-          <li><a href="/groups">Groups</a></li>
-          {user && <li><a href="/inbox">Inbox</a></li>}
+        {user && <li><Link to="/profile/edit">Edit Profile</Link></li>}
+        {user && <li><Link to="/inbox" className="hover:underline">Inbox</Link></li>}
+        {user && <li><Link to="/saved">Saved</Link></li>}
+        
+        {user?.is_staff || user?.is_moderator ? (
+          <li><Link to="/mod/feedback" className="text-red-600 font-semibold">
+            Feedback Admin
+          </Link></li>
+        ) : null}
         </ul>
       </div>
     </>

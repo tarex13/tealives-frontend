@@ -8,7 +8,7 @@ function Profile() {
   const { user } = useAuth()
   const [posts, setPosts] = useState([])
   const [listings, setListings] = useState([])
-
+  console.log(user)
   useEffect(() => {
     if (!user || !user.user?.id) return;
   
