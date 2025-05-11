@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import Spinner from './components/Spinner';
 import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
 import Home from './pages/Home';
+
 import GroupDirectory from './pages/GroupDirectory';
 import Marketplace from './pages/Marketplace';
 import Event from './pages/Event';
@@ -27,22 +29,32 @@ import EditProfile from './pages/EditProfile';
 import Sidebar from './components/Sidebar';
 import CreateListing from './components/CreateListing';
 import GroupChatPage from './pages/GroupChatPage';
+import SettingsDashboard from './components/Settings/SettingsDashboard';
+import ProfileSettings from './components/Settings/ProfileSettings';
+import NotificationSettings from './components/Settings/NotificationSettings';
+import PrivacySettings from './components/Settings/PrivacySettings';
+import PreferencesSettings from './components/Settings/PreferencesSettings';
+import AccountDelete from './components/Settings/AccountDelete';
+import ErrorBoundary from './components/ErrorBoundary';
+import ResetPass from './components/Settings/ResetPass';
 
 function App() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 flex">
+  if (loading) {
+    return null;
+  }
 
-      {user && (
-        <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
-      )}
-      <div className="flex-1 ml-0">
-        <Navbar toggleSidebar={toggleSidebar} />
-        <Routes>
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gray-50 text-gray-800 flex">
+        {user && <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />}
+        <div className="flex-1 ml-0">
+          <Navbar toggleSidebar={toggleSidebar} />
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
@@ -68,6 +80,12 @@ function App() {
             <Route path="/mod" element={<ModPanel />} />
             <Route path="/mod/feedback" element={<AdminFeedback />} />
             <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
+            <Route path="/settings/profile" element={<ProfileSettings />} />
+            <Route path="/settings/reset" element={<ResetPass />} />
+            <Route path="/settings/notifications" element={<NotificationSettings />} />
+            <Route path="/settings/privacy" element={<PrivacySettings />} />
+            <Route path="/settings/preferences" element={<PreferencesSettings />} />
+            <Route path="/settings/delete" element={<AccountDelete />} />
           </Route>
 
           {/* 404 Not Found */}
@@ -75,6 +93,7 @@ function App() {
         </Routes>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 

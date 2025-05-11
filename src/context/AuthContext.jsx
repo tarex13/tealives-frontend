@@ -8,6 +8,7 @@ let refreshTimeoutId = null;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const fetchUserProfile = async (accessToken) => {
     try {
@@ -62,28 +63,21 @@ export const AuthProvider = ({ children }) => {
   };
 
   const scheduleSilentRefresh = (accessToken, refreshToken) => {
-    if (!accessToken || !refreshToken) {
-      console.warn('[AuthContext] Missing tokens, cannot schedule refresh.');
-      return;
-    }
+    if (!accessToken || !refreshToken) return;
 
     let decoded;
     try {
       decoded = jwtDecode(accessToken);
     } catch (e) {
-      console.error('[AuthContext] Failed to decode access token:', e);
       logoutUser();
       return;
     }
 
     const expiresAt = decoded.exp * 1000;
-    const buffer = 60 * 1000; // Refresh 1 minute before expiry
+    const buffer = 60 * 1000;
     const delay = expiresAt - Date.now() - buffer;
 
-    if (delay <= 0 || isNaN(delay)) {
-      console.warn('[AuthContext] Token already expired or invalid delay.');
-      return;
-    }
+    if (delay <= 0 || isNaN(delay)) return;
 
     if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
 
@@ -98,17 +92,13 @@ export const AuthProvider = ({ children }) => {
         if (profile) {
           setUser({ ...profile, access, refresh: newRefresh });
           scheduleSilentRefresh(access, newRefresh);
-          console.log('[AuthContext] Silent token refresh succeeded.');
         } else {
           logoutUser();
         }
       } catch (err) {
-        console.error('[AuthContext] Silent refresh failed:', err);
         logoutUser();
       }
     }, delay);
-
-    console.log(`[AuthContext] Token refresh scheduled in ${Math.round(delay / 1000)}s.`);
   };
 
   useEffect(() => {
@@ -125,12 +115,15 @@ export const AuthProvider = ({ children }) => {
         } else {
           logoutUser();
         }
+        setLoading(false);
       });
+    } else {
+      setLoading(false);
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loginUser, logoutUser, updateAccessToken }}>
+    <AuthContext.Provider value={{ user, loginUser, logoutUser, updateAccessToken, loading }}>
       {children}
     </AuthContext.Provider>
   );

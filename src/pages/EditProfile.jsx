@@ -1,83 +1,64 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Cropper from 'react-easy-crop';
+import api from '../api'; // Adjust path based on your project structure
 import { useAuth } from '../context/AuthContext';
-import api from '../api';
+import getCroppedImg from '../utils/cropImageHelper'; // We will define this helper next
 
 function EditProfile() {
   const { user } = useAuth();
-  const [form, setForm] = useState({
-    bio: '',
-    city: '',
-    profile_image: null,
-    preview: null, // For image preview
-  });
-
+  const [form, setForm] = useState({ bio: '', city: '', profile_image: null, preview: null });
   const [success, setSuccess] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [cropSettings, setCropSettings] = useState({ crop: { x: 0, y: 0 }, zoom: 1, aspect: 1 });
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [cropping, setCropping] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await api.get('user/profile/');
-        setForm({ 
-          ...res.data, 
-          profile_image: null, 
-          preview: res.data.profile_image_url || null // Assuming your API sends this
-        });
-      } catch (err) {
-        console.error('Error loading profile');
-      }
+    const loadProfile = async () => {
+      const res = await api.get('user/profile/');
+      setForm({
+        ...res.data,
+        profile_image: null,
+        preview: res.data.profile_image_url || null,
+      });
     };
-
-    load();
+    loadProfile();
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === 'profile_image') {
-      const file = files[0];
-      if (file && file.size > 5 * 1024 * 1024) {
-        alert('Image size must be under 5MB.');
-        return;
-      }
-      setForm({
-        ...form,
-        profile_image: file,
-        preview: URL.createObjectURL(file),
-      });
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.size <= 5 * 1024 * 1024) {
+      setForm({ ...form, profile_image: file, preview: URL.createObjectURL(file) });
+      setCropping(true);
     } else {
-      setForm({ ...form, [name]: value });
+      alert('Please upload an image smaller than 5MB.');
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setUploadProgress(0);
+  const onCropComplete = useCallback((_, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels);
+  }, []);
 
+  const uploadCroppedImage = async () => {
     try {
+      const croppedImageBlob = await getCroppedImg(form.preview, croppedAreaPixels);
       const formData = new FormData();
       formData.append('bio', form.bio);
       formData.append('city', form.city);
-      if (form.profile_image) {
-        formData.append('profile_image', form.profile_image);
-      }
+      formData.append('profile_image', croppedImageBlob, 'cropped_image.jpg');
 
+      setSubmitting(true);
       await api.put('user/profile/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(progress);
-        },
       });
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch {
-      alert('Update failed. Please try again.');
+    } catch (err) {
+      alert('Failed to upload image.');
     } finally {
       setSubmitting(false);
-      setUploadProgress(0);
+      setCropping(false);
     }
   };
 
@@ -85,78 +66,55 @@ function EditProfile() {
     <div className="max-w-xl mx-auto p-6 bg-white shadow rounded mt-8">
       <h1 className="text-2xl font-bold mb-4 text-center">Edit Your Profile</h1>
 
-      {success && (
-        <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center animate-pulse">
-          🎉 Profile updated successfully!
-        </div>
-      )}
+      {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center">🎉 Profile updated!</div>}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* City Field */}
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
         <input
           name="city"
           value={form.city}
-          onChange={handleChange}
+          onChange={(e) => setForm({ ...form, city: e.target.value })}
           placeholder="City"
           className="w-full border p-2 rounded"
         />
 
-        {/* Bio Field */}
         <textarea
           name="bio"
           value={form.bio}
-          onChange={handleChange}
+          onChange={(e) => setForm({ ...form, bio: e.target.value })}
           placeholder="Tell us about yourself..."
           className="w-full border p-2 rounded h-32"
         />
 
-        {/* Profile Image Upload */}
         <label className="block w-full p-4 text-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50">
           <span className="text-gray-600">
-            {form.preview ? 'Change Profile Picture' : 'Click or Drag & Drop Profile Picture'}
+            {form.preview ? 'Change Profile Picture' : 'Click to Upload Profile Picture'}
           </span>
-          <input
-            type="file"
-            name="profile_image"
-            accept="image/*"
-            className="hidden"
-            onChange={handleChange}
-          />
+          <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
         </label>
 
-        {/* Image Preview */}
-        {form.preview && (
-          <div className="flex justify-center mb-4">
-            <img
-              src={form.preview}
-              alt="Profile Preview"
-              className="w-32 h-32 object-cover rounded-full shadow"
+        {cropping && form.preview && (
+          <div className="relative w-full h-64 bg-gray-100">
+            <Cropper
+              image={form.preview}
+              crop={cropSettings.crop}
+              zoom={cropSettings.zoom}
+              aspect={1}
+              onCropChange={(crop) => setCropSettings((prev) => ({ ...prev, crop }))}
+              onZoomChange={(zoom) => setCropSettings((prev) => ({ ...prev, zoom }))}
+              onCropComplete={onCropComplete}
             />
           </div>
         )}
 
-        {/* Progress Bar */}
-        {submitting && (
-          <div className="flex flex-col items-center space-y-2 mt-4">
-            <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
-            <div className="w-full bg-gray-200 rounded-full h-4">
-              <div
-                className="bg-blue-600 h-4 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-            <p className="text-gray-700">{uploadProgress}%</p>
-          </div>
+        {cropping && (
+          <button
+            className="btn bg-green-600 text-white px-4 py-2 rounded w-full mt-4"
+            onClick={uploadCroppedImage}
+            disabled={submitting}
+          >
+            {submitting ? 'Uploading...' : 'Apply and Save Changes'}
+          </button>
         )}
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition disabled:opacity-50"
-        >
-          {submitting ? 'Saving...' : 'Save Changes'}
-        </button>
       </form>
     </div>
   );
