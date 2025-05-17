@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useCity } from '../context/CityContext';
 import '../css/CitySelectorModal.css'
+import { CITIES } from '../../constants';
 function CitySelectorModal() {
   const { city, setCity } = useCity();
   const [visible, setVisible] = useState(false);
@@ -42,10 +43,11 @@ function CitySelectorModal() {
           defaultValue="Select"
         >
           <option disabled value="Select">Select</option>
-          <option value="toronto">Toronto</option>
-          <option value="vancouver">Vancouver</option>
-          <option value="calgary">Calgary</option>
-          <option value="montreal">Montreal</option>
+          {CITIES.map((cityName) => (
+    <option key={cityName} value={cityName}>
+      {cityName.charAt(0).toUpperCase() + cityName.slice(1)}
+    </option>
+  ))}
         </select>
 
         <label className="flex items-center justify-center space-x-2 text-gray-700 dark:text-gray-300 text-sm mb-4">

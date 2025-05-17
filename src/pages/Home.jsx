@@ -5,6 +5,7 @@ import CreatePost from '../components/CreatePost';
 import EventCard from '../components/EventCard';
 import CitySelectorModal from '../components/CitySelectorModal';
 import { useAuth } from '../context/AuthContext';
+import { CITIES } from '../../constants';
 import { useCity } from '../context/CityContext';
 
 function CityFilter() {
@@ -14,15 +15,16 @@ function CityFilter() {
     <div className="mb-4 flex items-center space-x-2">
       <label className="font-medium">Viewing posts in:</label>
       <select
-        value={city}
-        onChange={(e) => setCity(e.target.value)}
-        className="p-2 border rounded bg-white focus:outline-none focus:ring focus:ring-blue-300"
-      >
-        <option value="toronto">Toronto</option>
-        <option value="vancouver">Vancouver</option>
-        <option value="calgary">Calgary</option>
-        <option value="montreal">Montreal</option>
-      </select>
+  value={city}
+  onChange={(e) => setCity(e.target.value)}
+  className="p-2 border rounded bg-white focus:outline-none focus:ring focus:ring-blue-300"
+>
+  {CITIES.map((cityName) => (
+    <option key={cityName} value={cityName}>
+      {cityName.charAt(0).toUpperCase() + cityName.slice(1)}
+    </option>
+  ))}
+</select>
     </div>
   );
 }

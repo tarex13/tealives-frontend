@@ -1,6 +1,6 @@
 import React from 'react';
 import MediaPreviewCard from './MediaPreviewCard';
-import { computeFileHash } from '../utils/fileUtils';
+import { computeFileHash } from '../utils/fileutils';
 
 function MediaManager({ mediaFiles, setMediaFiles, openEditor }) {
   const handleFilesSelected = async (event) => {
