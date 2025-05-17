@@ -25,12 +25,12 @@ function Sidebar({ isOpen, toggleSidebar }) {
       )}
       <div
         style={{ top: '4vw', zIndex: '0', position: 'fixed', overflow:'auto', color: '#fff' }}
-        className={`fixed top-0 left-0 h-full w-64 bg-gray-100 dark:bg-gray-800 p-4 z-50 transform ${
+        className={`fixed top-0 left-0 h-full w-64 bg-gray-100 text-black dark:bg-gray-800 p-4 z-50 transform  ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } transition-transform duration-300 md:translate-x-0 md:static md:block`}
       >
-        <h2 className="text-lg font-bold mb-4">Navigation</h2>
-        <ul className="space-y-2">
+        <h2 className="text-lg font-bold mb-4 text-black">Navigation</h2>
+        <ul className="space-y-2 text-black">
                 {user && <NavLink to="/profile" className={linkClasses}>My Profile</NavLink>}
           {user && <li><NavLink to="/inbox" className={linkClasses}>Inbox</NavLink></li>}
           {user && <li><NavLink to="/saved" className={linkClasses}>Saved</NavLink></li>}

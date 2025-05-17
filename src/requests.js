@@ -38,9 +38,17 @@ export const createEvent = (data) => api.post('events/', data);
 export const rsvpToEvent = (id) => api.patch(`events/${id}/rsvp/`);
 
 // 🛒 Marketplace
-export const fetchMarketplace = (city) => 
-  api.get(`marketplace/?city=${encodeURIComponent(city)}`).then(res => res.data);
+export const fetchMarketplace = async (city, filters = {}) => {
+    if (typeof filters === 'string') {
+        throw new Error("Filters should be an object, not a string.");
+    }
 
+    const params = new URLSearchParams({ city, ...filters });
+    console.log("Final URL Params:", params.toString());
+
+    const response = await api.get(`marketplace/?${params.toString()}`);
+    return response.data;
+};
 // 🚀 Create Listing with Progress Callback
 export const createListing = async (data, onProgress) => {
   return api.post('marketplace/create/', data, {
@@ -68,6 +76,9 @@ export const toggleSaveListing = (id) => api.post(`marketplace/${id}/toggle-save
 
 // 🔁 Swapp
 export const updateSwappOffer = (id, data) => api.patch(`swapp/offer/${id}/`, data);
+export const createPoll = (data) => api.post('polls/', data);
+export const fetchPostById = (id) => 
+    api.get(`posts/${id}/`).then(res => res.data).catch(() => null);
 
 // 🔔 Notifications
 export const fetchNotifications = () => api.get('notifications/').then(res => res.data);
@@ -100,7 +111,16 @@ export const fetchPosts = (city, sort = 'newest', url = null) =>
   url ? api.get(url).then(res => res.data) : api.get(`posts/?city=${city}&sort=${sort}`).then(res => res.data);
 
 export const fetchGroups = () => api.get('groups-public/').then(res => res.data);
-export const createPost = (data) => api.post('posts/', data);
+export const createPost = async (data, onProgress = null) => {
+    return api.post('posts/', data, {
+      onUploadProgress: onProgress,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(res => res.data);
+  };
+
+  export const votePoll = async (pollId, selectedOptionId) => {
+    return api.post('poll/vote/', { poll: pollId, selected_option: selectedOptionId });
+  };
 
 export const markGroupMessagesRead = (groupId) => api.post(`groups/${groupId}/read/`);
 

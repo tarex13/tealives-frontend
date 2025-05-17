@@ -1,132 +1,133 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { jwtDecode } from 'jwt-decode';
-import api from '../api';
-import { setUpdateAccessTokenCallback } from './AuthContextHelper';
+// src/context/AuthContext.jsx
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { jwtDecode } from 'jwt-decode'
+import api from '../api'
+import { setUpdateAccessTokenCallback } from './AuthContextHelper'
 
-const AuthContext = createContext();
-let refreshTimeoutId = null;
+const AuthContext = createContext()
+let refreshTimeoutId = null
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   const fetchUserProfile = async (accessToken) => {
     try {
       const res = await api.get('user/profile/', {
         headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      return res.data;
+      })
+      return res.data
     } catch (err) {
-      console.error('[AuthContext] Failed to fetch user profile:', err);
-      return null;
+      console.error('[AuthContext] Failed to fetch user profile:', err)
+      return null
     }
-  };
+  }
 
   const loginUser = async ({ access, refresh }) => {
-    localStorage.setItem('accessToken', access);
-    localStorage.setItem('refreshToken', refresh);
+    localStorage.setItem('accessToken', access)
+    localStorage.setItem('refreshToken', refresh)
 
-    const profile = await fetchUserProfile(access);
+    const profile = await fetchUserProfile(access)
     if (profile) {
-      setUser({ ...profile, access, refresh });
-      scheduleSilentRefresh(access, refresh);
+      setUser(profile)
+      scheduleSilentRefresh(access, refresh)
     } else {
-      logoutUser();
+      logoutUser()
     }
-  };
+  }
 
   const logoutUser = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    setUser(null)
     if (refreshTimeoutId) {
-      clearTimeout(refreshTimeoutId);
-      refreshTimeoutId = null;
+      clearTimeout(refreshTimeoutId)
+      refreshTimeoutId = null
     }
-  };
+  }
 
   const updateAccessToken = (newAccess) => {
-    const refresh = localStorage.getItem('refreshToken');
+    const refresh = localStorage.getItem('refreshToken')
     if (!refresh) {
-      logoutUser();
-      return;
+      logoutUser()
+      return
     }
     fetchUserProfile(newAccess).then((profile) => {
       if (profile) {
-        setUser({ ...profile, access: newAccess, refresh });
-        localStorage.setItem('accessToken', newAccess);
-        scheduleSilentRefresh(newAccess, refresh);
+        setUser(profile)
+        localStorage.setItem('accessToken', newAccess)
+        scheduleSilentRefresh(newAccess, refresh)
       } else {
-        logoutUser();
+        logoutUser()
       }
-    });
-  };
+    })
+  }
 
   const scheduleSilentRefresh = (accessToken, refreshToken) => {
-    if (!accessToken || !refreshToken) return;
+    if (!accessToken || !refreshToken) return
 
-    let decoded;
+    let decoded
     try {
-      decoded = jwtDecode(accessToken);
+      decoded = jwtDecode(accessToken)
     } catch (e) {
-      logoutUser();
-      return;
+      logoutUser()
+      return
     }
 
-    const expiresAt = decoded.exp * 1000;
-    const buffer = 60 * 1000;
-    const delay = expiresAt - Date.now() - buffer;
+    const expiresAt = decoded.exp * 1000
+    const buffer = 60 * 1000
+    const delay = expiresAt - Date.now() - buffer
 
-    if (delay <= 0 || isNaN(delay)) return;
+    if (delay <= 0 || isNaN(delay)) return
 
-    if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
+    if (refreshTimeoutId) clearTimeout(refreshTimeoutId)
 
     refreshTimeoutId = setTimeout(async () => {
       try {
-        const res = await api.post('token/refresh/', { refresh: refreshToken });
-        const { access, refresh: newRefresh } = res.data;
-        localStorage.setItem('accessToken', access);
-        localStorage.setItem('refreshToken', newRefresh);
+        const res = await api.post('token/refresh/', { refresh: refreshToken })
+        const { access, refresh: newRefresh } = res.data
+        localStorage.setItem('accessToken', access)
+        localStorage.setItem('refreshToken', newRefresh)
 
-        const profile = await fetchUserProfile(access);
+        const profile = await fetchUserProfile(access)
         if (profile) {
-          setUser({ ...profile, access, refresh: newRefresh });
-          scheduleSilentRefresh(access, newRefresh);
+          setUser(profile)
+          scheduleSilentRefresh(access, newRefresh)
         } else {
-          logoutUser();
+          logoutUser()
         }
       } catch (err) {
-        logoutUser();
+        logoutUser()
       }
-    }, delay);
-  };
+    }, delay)
+  }
 
   useEffect(() => {
-    setUpdateAccessTokenCallback(updateAccessToken);
+    setUpdateAccessTokenCallback(updateAccessToken)
 
-    const access = localStorage.getItem('accessToken');
-    const refresh = localStorage.getItem('refreshToken');
+    const access = localStorage.getItem('accessToken')
+    const refresh = localStorage.getItem('refreshToken')
 
     if (access && refresh) {
       fetchUserProfile(access).then((profile) => {
         if (profile) {
-          setUser({ ...profile, access, refresh });
-          scheduleSilentRefresh(access, refresh);
+          setUser(profile)
+          scheduleSilentRefresh(access, refresh)
         } else {
-          logoutUser();
+          logoutUser()
         }
-        setLoading(false);
-      });
+        setLoading(false)
+      })
     } else {
-      setLoading(false);
+      setLoading(false)
     }
-  }, []);
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, loginUser, logoutUser, updateAccessToken, loading }}>
       {children}
     </AuthContext.Provider>
-  );
-};
+  )
+}
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext)

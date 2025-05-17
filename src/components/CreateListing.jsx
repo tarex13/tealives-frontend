@@ -49,7 +49,6 @@ function CreateListing() {
       setForm((prev) => ({
         ...prev,
         [name]: value,
-        delivery_note: selected ? selected.label : '',
       }));
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));

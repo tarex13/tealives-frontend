@@ -6,19 +6,17 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/',
 })
 
-// ✅ Add access token to requests
+// ✅ Attach access token from localStorage
 api.interceptors.request.use((config) => {
-  const stored = localStorage.getItem('user')
-  const user = stored ? JSON.parse(stored) : null
-
-  if (user?.access) {
-    config.headers.Authorization = `Bearer ${user.access}`
+  const accessToken = localStorage.getItem('accessToken')
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`
     console.log('[api.js] Access token attached')
   }
   return config
 }, (error) => Promise.reject(error))
 
-// ✅ Refresh token logic on 401
+// ✅ Refresh token on 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -30,20 +28,19 @@ api.interceptors.response.use(
       !originalRequest._retry
     ) {
       originalRequest._retry = true
-      const stored = localStorage.getItem('user')
-      if (!stored) return Promise.reject(error)
 
-      const user = JSON.parse(stored)
+      const refresh = localStorage.getItem('refreshToken')
+      if (!refresh) return Promise.reject(error)
 
       try {
         const refreshRes = await axios.post(
           `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/'}token/refresh/`,
-          { refresh: user.refresh }
+          { refresh }
         )
 
-        const { access, refresh } = refreshRes.data
-        const updatedUser = { ...user, access, refresh }
-        localStorage.setItem('user', JSON.stringify(updatedUser))
+        const { access, refresh: newRefresh } = refreshRes.data
+        localStorage.setItem('accessToken', access)
+        localStorage.setItem('refreshToken', newRefresh)
 
         const updateAccessToken = getUpdateAccessTokenCallback()
         if (updateAccessToken) updateAccessToken(access)
@@ -52,7 +49,8 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         console.error('[api.js] Refresh failed:', refreshError)
-        localStorage.removeItem('user')
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
         window.location.href = '/user/auth/'
         return Promise.reject(refreshError)
       }

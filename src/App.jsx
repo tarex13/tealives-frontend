@@ -9,7 +9,7 @@ import GroupDirectory from './pages/GroupDirectory';
 import Marketplace from './pages/Marketplace';
 import Event from './pages/Event';
 import Login from './pages/Auth';
-import Register from './pages/Register';
+import Register from './pages/Auth';
 import CreateEvent from './pages/CreateEvent';
 import MySwapps from './pages/MySwapps';
 import Inbox from './pages/Inbox';
@@ -37,6 +37,7 @@ import PreferencesSettings from './components/Settings/PreferencesSettings';
 import AccountDelete from './components/Settings/AccountDelete';
 import ErrorBoundary from './components/ErrorBoundary';
 import ResetPass from './components/Settings/ResetPass';
+import { NotificationProvider } from './context/NotificationContext';
 
 function App() {
   const { user, loading } = useAuth();
@@ -50,15 +51,17 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <NotificationProvider>
       <div className="min-h-screen bg-gray-50 text-gray-800 flex">
         {user && <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />}
         <div className="flex-1 ml-0">
           <Navbar toggleSidebar={toggleSidebar} />
+          <div style={{paddingTop: '5vw'}}>
           <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/user/auth" element={<Login />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/event/:id" element={<Event />} />
@@ -91,8 +94,10 @@ function App() {
           {/* 404 Not Found */}
           <Route path="*" element={<PageNotFound />} />
         </Routes>
+        </div>
       </div>
     </div>
+    </NotificationProvider>
     </ErrorBoundary>
   );
 }
