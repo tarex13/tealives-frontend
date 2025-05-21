@@ -19,7 +19,7 @@ export default function ResetPass() {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form  onSubmit={handleSubmit}>
       <h2 className="text-2xl font-bold mb-4">Security Settings</h2>
       <input className="border p-2 mb-2 w-full" type="password" placeholder="Old Password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} required />
       <input className="border p-2 mb-2 w-full" type="password" placeholder="New Password" value={newPass} onChange={(e) => setNewPass(e.target.value)} required />

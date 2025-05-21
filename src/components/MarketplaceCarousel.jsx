@@ -1,75 +1,80 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-function MarketplaceCarousel({ media = [], price }) {
+export default function MarketplaceCarousel({ media = [] }) {
   const [current, setCurrent] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  if (media.length === 0) return null;
+  const next = () => setCurrent((current + 1) % media.length);
+  const prev = () => setCurrent((current - 1 + media.length) % media.length);
 
-  const handlePrev = () => {
-    setCurrent((prev) => (prev - 1 + media.length) % media.length);
+  const getImageUrl = (file) => {
+    if (!file) return '';
+    if (typeof file === 'string') return file;
+    if (file.file_url) return file.file_url;
+    if (file.url) return file.url;
+    if (file.file) return file.file;
+    if (file instanceof File) return URL.createObjectURL(file);
+    return '';
   };
 
-  const handleNext = () => {
-    setCurrent((prev) => (prev + 1) % media.length);
+  const handleKeyDown = (e) => {
+    if (!lightboxOpen) return;
+    if (e.key === 'Escape') setLightboxOpen(false);
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
   };
+
+  useEffect(() => {
+    if (lightboxOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = 'auto';
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxOpen]);
+
+  if (!media.length) return null;
 
   return (
-    <div>
-      {/* Large Preview */}
-      <div className="relative w-full bg-gray-100 rounded overflow-hidden flex items-center justify-center mb-4" style={{maxHeight: '400px'}}>
+    <div className="relative">
+      <img
+        src={getImageUrl(media[current])}
+        alt={`Media ${current + 1}`}
+        className="w-full h-64 object-cover rounded transition-opacity duration-300 cursor-pointer"
+        onClick={() => setLightboxOpen(true)}
+        loading="lazy"
+      />
 
-        {media[current]?.is_video ? (
-          <video src={media[current].file} controls className="max-h-full max-w-full object-contain" />
-        ) : (
-          <img src={media[current].file} alt="Marketplace Item" className="max-h-full max-w-full object-contain" />
-        )}
+      {media.length > 1 && (
+        <>
+          <button
+            onClick={prev}
+            aria-label="Previous image"
+            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-40 text-white p-2 rounded-full"
+          >
+            ‹
+          </button>
+          <button
+            onClick={next}
+            aria-label="Next image"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-40 text-white p-2 rounded-full"
+          >
+            ›
+          </button>
+        </>
+      )}
 
-        {/* Navigation Arrows */}
-        {media.length > 1 && (
-          <>
-            <button
-              onClick={handlePrev}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
-            >
-              ◀
-            </button>
-            <button
-              onClick={handleNext}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
-            >
-              ▶
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Thumbnails */}
-      <div className="flex flex-wrap gap-2 justify-center"  style={{position: 'relative'}}>
-      <div style={{
-              position: 'absolute',
-              right: '0px',
-              color: '#1e2939',
-              backgroundColor: '#f9fafb',
-              fontWeight: 'bold',
-              textAlign: 'center',
-              fontSize: '1.5vw',
-              top: '0',
-              padding: '0.2vw',}}
->Price: ${price}</div>
-        {media.map((item, idx) => (
+      {lightboxOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
+          onClick={() => setLightboxOpen(false)}
+        >
           <img
-            key={idx}
-            src={item.file}
-            alt="Thumbnail"
-            className={`w-20 h-20 object-cover border-2 rounded cursor-pointer ${
-              current === idx ? 'border-blue-500' : 'border-gray-300'
-            }`}
-            onClick={() => setCurrent(idx)}
+            src={getImageUrl(media[current])}
+            alt={`Zoomed Media ${current + 1}`}
+            className="max-w-full max-h-full"
           />
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
-
-export default MarketplaceCarousel;

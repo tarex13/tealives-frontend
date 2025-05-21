@@ -108,9 +108,9 @@ function AdminFeedback() {
               {new Date(fb.created_at).toLocaleString()}
             </p>
             <p className="font-medium">
-              {fb.category} — from {fb.user?.username || 'Anonymous'}
+              {fb.type} — from {fb?.username || 'Anonymous'}
             </p>
-            <p className="mt-1">{fb.message}</p>
+            <p className="mt-1">{fb.content}</p>
           </div>
         ))
         

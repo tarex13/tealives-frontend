@@ -1,7 +1,7 @@
 import React from 'react'
 function TermsPage() {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-10 text-black">
+      <div className="max-w-4xl mx-auto px-6 py-10 text-black dark:text-gray-200">
         <h1 className="text-3xl font-bold mb-6">Tealives Terms of Use & Community Guidelines</h1>
   
         <p className="mb-6 text-sm italic">Effective Date: [Insert Launch Date]</p>

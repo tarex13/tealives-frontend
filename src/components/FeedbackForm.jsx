@@ -33,14 +33,14 @@ function FeedbackForm() {
       {/* Feedback Form */}
       <form 
         onSubmit={handleSubmit} 
-        className="max-w-xl mx-auto p-6 bg-white rounded shadow"
+        className="max-w-xl mx-auto p-6 bg-white dark:bg-gray-900 rounded shadow"
       >
         <h1 className="text-2xl font-bold mb-4">Send Feedback</h1>
 
         <label className="block mb-2">
           Feedback Type:
           <select
-            value={type}
+            value={type} dark:text-white dark:bg-gray-900
             onChange={(e) => setType(e.target.value)}
             className="w-full border p-2 rounded mt-1"
           >

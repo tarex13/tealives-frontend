@@ -63,7 +63,7 @@ function EditProfile() {
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6 bg-white shadow rounded mt-8">
+    <div className="max-w-xl mx-auto p-6 bg-white dark:bg-gray-800 shadow rounded mt-8">
       <h1 className="text-2xl font-bold mb-4 text-center">Edit Your Profile</h1>
 
       {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center">🎉 Profile updated!</div>}
@@ -106,13 +106,13 @@ function EditProfile() {
           </div>
         )}
 
-        {cropping && (
+        {(
           <button
             className="btn bg-green-600 text-white px-4 py-2 rounded w-full mt-4"
             onClick={uploadCroppedImage}
             disabled={submitting}
           >
-            {submitting ? 'Uploading...' : 'Apply and Save Changes'}
+            {submitting ? 'Uploading...' : 'Save Changes'}
           </button>
         )}
       </form>

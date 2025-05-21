@@ -3,6 +3,7 @@ import { createPost, createPoll, fetchPostById } from '../requests';
 import MediaManager from './MediaManager';
 import ImageEditorModal from './ImageEditorModal';
 import { useNotification } from '../context/NotificationContext';
+import { toZonedTime } from 'date-fns-tz';
 
 const MAX_MEDIA_FILES = 5;
 
@@ -48,40 +49,58 @@ function CreatePost({ onPostCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim()) return setError('Title is required.');
-
+    setError(null);
+  
+    if (!form.title.trim()) {
+      return setError('Title is required.');
+    }
+  
     if (form.post_type === 'poll') {
       const validOptions = pollOptions.filter((opt) => opt.trim());
-      if (validOptions.length < 2) return setError('At least two poll options are required.');
+      if (validOptions.length < 2) {
+        return setError('At least two poll options are required.');
+      }
     }
-
+  
     try {
       setLoading(true);
+  
       if (form.post_type === 'poll') {
+        const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
         const payload = {
           title: form.title.trim(),
           description: form.content.trim(),
-          expires_at: expiresAt || null,
+          expires_at: expiresAt
+            ? toZonedTime(expiresAt, userTimeZone).toISOString()
+            : null,
           options: pollOptions.filter((opt) => opt.trim()),
         };
-        const response = await createPoll(payload);
-        onPostCreated?.(response.data);
+  
+        const pollResponse = await createPoll(payload);
+  
+        // Fetch the full post associated with the newly created poll
+        const postId = pollResponse.data?.post;
+        const fullPost = await fetchPostById(postId);
+  
+        onPostCreated?.(fullPost || pollResponse.data);
         showNotification('Poll created successfully!', 'success');
       } else {
         const postData = new FormData();
-        Object.entries(form).forEach(([key, value]) => postData.append(key, value));
-
+        Object.entries(form).forEach(([key, value]) => {
+          postData.append(key, value);
+        });
         mediaFiles.forEach(({ editedFile, file, caption }) => {
           postData.append('media_files[]', editedFile || file);
           postData.append('media_captions[]', caption || '');
         });
-
+  
         const newPost = await createPost(postData);
         const fullPost = await fetchPostById(newPost.id);
         onPostCreated?.(fullPost || newPost);
-
         showNotification('Post created successfully!', 'success');
       }
+  
       resetForm();
     } catch (err) {
       console.error(err);
@@ -93,7 +112,7 @@ function CreatePost({ onPostCreated }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow mb-6">
+    <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 p-4 rounded-xl shadow-lg mb-6">
       <h2 className="text-xl font-bold mb-3">Create a New Post</h2>
       {error && <p className="text-red-500 mb-2">{error}</p>}
 
@@ -104,7 +123,7 @@ function CreatePost({ onPostCreated }) {
         onChange={handleChange}
         placeholder="Title"
         required
-        className="w-full border p-2 rounded mb-2"
+        className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded mb-2"
       />
 
       {form.post_type === 'poll' ? (
@@ -115,7 +134,7 @@ function CreatePost({ onPostCreated }) {
             onChange={handleChange}
             placeholder="Poll Description (Optional)"
             rows={2}
-            className="w-full border p-2 rounded mb-2"
+            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded mb-2"
           />
           <h4 className="font-medium mb-1">Poll Options:</h4>
           {pollOptions.map((opt, idx) => (
@@ -126,7 +145,7 @@ function CreatePost({ onPostCreated }) {
                 onChange={(e) => handleOptionChange(idx, e.target.value)}
                 placeholder={`Option ${idx + 1}`}
                 required={idx < 2}
-                className="flex-1 border p-2 rounded"
+                className="flex-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded"
               />
               {pollOptions.length > 2 && (
                 <button type="button" onClick={() => removeOption(idx)} className="text-red-500 hover:text-red-700">
@@ -136,11 +155,7 @@ function CreatePost({ onPostCreated }) {
             </div>
           ))}
           {pollOptions.length < 5 && (
-            <button
-              type="button"
-              onClick={addOption}
-              className="text-xs text-blue-600 hover:underline mb-2"
-            >
+            <button type="button" onClick={addOption} className="text-xs text-blue-600 hover:underline mb-2">
               + Add Option
             </button>
           )}
@@ -150,7 +165,7 @@ function CreatePost({ onPostCreated }) {
             type="datetime-local"
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.target.value)}
-            className="w-full border p-2 rounded mb-4"
+            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded mb-4"
           />
         </>
       ) : (
@@ -161,12 +176,17 @@ function CreatePost({ onPostCreated }) {
           placeholder="What's on your mind?"
           rows={4}
           required
-          className="w-full border p-2 rounded mb-2"
+          className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded mb-2"
         />
       )}
 
       <div className="flex gap-4 items-center mb-2">
-        <select name="post_type" value={form.post_type} onChange={handleChange} className="border p-2 rounded">
+        <select
+          name="post_type"
+          value={form.post_type}
+          onChange={handleChange}
+          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 rounded"
+        >
           <option value="discussion">Discussion</option>
           <option value="alert">Alert</option>
           <option value="question">Question</option>
@@ -195,7 +215,7 @@ function CreatePost({ onPostCreated }) {
       <button
         type="submit"
         disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 disabled:opacity-50 mt-4"
+        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded w-full mt-4 disabled:opacity-50 transition"
       >
         {loading ? 'Posting...' : form.post_type === 'poll' ? 'Create Poll' : 'Post'}
       </button>

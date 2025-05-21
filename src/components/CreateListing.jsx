@@ -44,43 +44,34 @@ function CreateListing() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'delivery_option') {
-      const selected = DELIVERY_OPTIONS.find(opt => opt.value === value);
-      setForm((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
+    setForm(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
-    const validFiles = files.filter((file) => {
+    const validFiles = files.filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`${file.name} is too large (max 10MB).`);
+        alert(`${file.name} exceeds 10MB.`);
         return false;
       }
       if (!file.type.startsWith('image') && !file.type.startsWith('video')) {
-        alert(`${file.name} is not a supported file type.`);
+        alert(`${file.name} is not supported.`);
         return false;
       }
       return true;
     });
 
     const uniqueFiles = validFiles.filter(
-      (file) => !form.files.some((f) => f.name === file.name && f.size === file.size)
+      file => !form.files.some(f => f.name === file.name && f.size === file.size)
     );
 
-    const previews = uniqueFiles.map((file) => URL.createObjectURL(file));
+    const previews = uniqueFiles.map(file => URL.createObjectURL(file));
 
-    setForm((prev) => ({
+    setForm(prev => ({
       ...prev,
       files: [...prev.files, ...uniqueFiles],
       previews: [...prev.previews, ...previews],
     }));
-
     setCurrentPreview(form.previews.length);
   };
 
@@ -89,7 +80,7 @@ function CreateListing() {
     const newPreviews = [...form.previews];
     newFiles.splice(index, 1);
     newPreviews.splice(index, 1);
-    setForm((prev) => ({
+    setForm(prev => ({
       ...prev,
       files: newFiles,
       previews: newPreviews,
@@ -99,7 +90,6 @@ function CreateListing() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (form.title.length < 3) return setError('Title must be at least 3 characters.');
     if (form.price <= 0) return setError('Price must be greater than 0.');
 
@@ -115,13 +105,10 @@ function CreateListing() {
     formData.append('category', form.category);
     formData.append('delivery_options', form.delivery_option);
     formData.append('delivery_note', form.delivery_note);
-
-    form.files.forEach((file) => {
-      formData.append('images', file);
-    });
+    form.files.forEach(file => formData.append('images', file));
 
     try {
-      await createListing(formData, (progressEvent) => {
+      await createListing(formData, progressEvent => {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         setUploadProgress(progress);
       });
@@ -140,7 +127,7 @@ function CreateListing() {
       setCurrentPreview(0);
       setTimeout(() => navigate('/marketplace'), 2000);
     } catch (err) {
-      console.error('Failed to create listing:', err);
+      console.error(err);
       setError('Could not create listing. Please try again.');
     } finally {
       setSubmitting(false);
@@ -153,86 +140,77 @@ function CreateListing() {
   }
 
   return (
-    <div className="max-w-xl mx-auto p-4 bg-white shadow rounded">
+    <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 shadow rounded">
       <h1 className="text-2xl font-bold mb-4 text-center">Create a New Listing</h1>
 
       {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-center">{error}</div>}
       {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center">{success}</div>}
 
-      <form onSubmit={handleSubmit} className="space-y-4 relative">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <input
-          type="text"
           name="title"
-          placeholder="Title"
-          className="w-full border p-2 rounded"
           value={form.title}
           onChange={handleChange}
+          placeholder="Title"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
           required
         />
 
         <textarea
           name="description"
-          placeholder="Description"
-          className="w-full border p-2 rounded"
-          rows={4}
           value={form.description}
           onChange={handleChange}
+          rows="4"
+          placeholder="Description"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
           required
         />
 
         <input
-          type="number"
           name="price"
-          placeholder="Price"
-          className="w-full border p-2 rounded"
           value={form.price}
           onChange={handleChange}
+          placeholder="Price"
+          type="number"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
           required
         />
 
-        {/* Category Selector */}
         <select
           name="category"
           value={form.category}
           onChange={handleChange}
-          className="w-full border p-2 rounded bg-white"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
         >
-          {CATEGORY_OPTIONS.map((cat) => (
-            <option key={cat.value} value={cat.value}>
-              {cat.label}
-            </option>
+          {CATEGORY_OPTIONS.map(cat => (
+            <option key={cat.value} value={cat.value}>{cat.label}</option>
           ))}
         </select>
 
-        {/* Delivery Options */}
         <select
           name="delivery_option"
           value={form.delivery_option}
           onChange={handleChange}
-          className="w-full border p-2 rounded bg-white"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
         >
-          {DELIVERY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+          {DELIVERY_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
 
-        {/* Delivery Note */}
         <textarea
           name="delivery_note"
-          placeholder="Optional Delivery Note (e.g., I can meet downtown at noon)"
-          className="w-full border p-2 rounded"
-          rows={2}
           value={form.delivery_note}
           onChange={handleChange}
+          placeholder="Optional delivery note..."
+          rows="2"
+          className="w-full border p-2 rounded bg-white dark:bg-gray-800 dark:border-gray-700"
         />
 
-        <label className="block w-full p-4 text-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50">
-          <span className="text-gray-600">Click or Drag & Drop Files Here</span>
+        <label className="block w-full p-4 text-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+          <span>Click or drag files</span>
           <input
             type="file"
-            name="images"
             accept="image/*,video/*"
             multiple
             className="hidden"
@@ -240,49 +218,34 @@ function CreateListing() {
           />
         </label>
 
-        {/* Media Preview */}
         {form.previews.length > 0 && (
           <>
-            <div className="relative w-full h-64 bg-gray-100 rounded overflow-hidden flex items-center justify-center mb-4">
+            <div className="relative w-full h-64 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center overflow-hidden">
               {form.files[currentPreview]?.type.startsWith('video') ? (
-                <video src={form.previews[currentPreview]} controls className="max-h-full max-w-full object-contain" />
+                <video src={form.previews[currentPreview]} controls className="max-h-full max-w-full" />
               ) : (
                 <img src={form.previews[currentPreview]} alt="Preview" className="max-h-full max-w-full object-contain" />
               )}
-              <button
-                type="button"
-                onClick={() => setCurrentPreview((prev) => (prev - 1 + form.previews.length) % form.previews.length)}
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
-              >
-                ◀
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPreview((prev) => (prev + 1) % form.previews.length)}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-700 text-white p-2 rounded-full hover:bg-gray-800"
-              >
-                ▶
-              </button>
+              <button onClick={() => setCurrentPreview((currentPreview - 1 + form.previews.length) % form.previews.length)} type="button" className="absolute left-2 top-1/2 -translate-y-1/2 bg-gray-700 text-white px-2 py-1 rounded-full">◀</button>
+              <button onClick={() => setCurrentPreview((currentPreview + 1) % form.previews.length)} type="button" className="absolute right-2 top-1/2 -translate-y-1/2 bg-gray-700 text-white px-2 py-1 rounded-full">▶</button>
             </div>
 
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex flex-wrap justify-center gap-2">
               {form.previews.map((preview, idx) => (
                 <div key={idx} className="relative">
                   <img
                     src={preview}
-                    alt="Thumbnail"
+                    alt="Thumb"
                     className={`w-20 h-20 object-cover border-2 rounded cursor-pointer ${
                       currentPreview === idx ? 'border-blue-500' : 'border-gray-300'
                     }`}
                     onClick={() => setCurrentPreview(idx)}
                   />
                   <button
-                    type="button"
                     onClick={() => removeFile(idx)}
-                    className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 text-xs hover:bg-red-700"
-                  >
-                    ✕
-                  </button>
+                    type="button"
+                    className="absolute top-0 right-0 bg-red-600 text-white text-xs rounded-full p-1"
+                  >✕</button>
                 </div>
               ))}
             </div>
@@ -290,22 +253,22 @@ function CreateListing() {
         )}
 
         {submitting && (
-          <div className="flex flex-col items-center space-y-2 mt-4">
-            <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
-            <div className="w-full bg-gray-200 rounded-full h-4">
+          <div className="mt-4 space-y-2">
+            <div className="w-8 h-8 border-4 border-blue-600 border-dashed rounded-full animate-spin mx-auto"></div>
+            <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
               <div
-                className="bg-blue-600 h-4 rounded-full transition-all duration-300"
+                className="bg-blue-600 h-4 rounded-full transition-all"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
-            <p className="text-gray-700">{uploadProgress}%</p>
+            <p className="text-center">{uploadProgress}%</p>
           </div>
         )}
 
         <button
           type="submit"
           disabled={submitting}
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition disabled:opacity-50"
+          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition disabled:opacity-50"
         >
           {submitting ? 'Posting...' : 'Post Listing'}
         </button>

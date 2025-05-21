@@ -1,133 +1,157 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { jwtDecode } from 'jwt-decode'
-import api from '../api'
-import { setUpdateAccessTokenCallback } from './AuthContextHelper'
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { jwtDecode } from 'jwt-decode';
+import api from '../api';
+import { setUpdateAccessTokenCallback } from './AuthContextHelper';
 
-const AuthContext = createContext()
-let refreshTimeoutId = null
+const AuthContext = createContext();
+let refreshTimeoutId = null;
+const BUFFER_TIME_MS = 60 * 1000;
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const fetchUserProfile = async (accessToken) => {
     try {
       const res = await api.get('user/profile/', {
         headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      return res.data
+      });
+      return res.data;
     } catch (err) {
-      console.error('[AuthContext] Failed to fetch user profile:', err)
-      return null
+      console.error('[AuthContext] Failed to fetch user profile:', err.response || err);
+      return null;
     }
-  }
+  };
 
-  const loginUser = async ({ access, refresh }) => {
-    localStorage.setItem('accessToken', access)
-    localStorage.setItem('refreshToken', refresh)
+  const loginUser = async ({ access }) => {
+    localStorage.setItem('accessToken', access);
+    localStorage.setItem('hasLoggedIn', 'true'); // ✅ Mark login for refresh cookie check
 
-    const profile = await fetchUserProfile(access)
+    const profile = await fetchUserProfile(access);
     if (profile) {
-      setUser(profile)
-      scheduleSilentRefresh(access, refresh)
+      setUser(profile);
+      scheduleSilentRefresh(access);
     } else {
-      logoutUser()
+      await logoutUser({ redirect: false });
     }
-  }
+  };
 
-  const logoutUser = () => {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    setUser(null)
+  const logoutUser = async ({ redirect = true } = {}) => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('hasLoggedIn');
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('user');
+    localStorage.setItem('sidebarOpen', false)
+    setUser(null);
+
     if (refreshTimeoutId) {
-      clearTimeout(refreshTimeoutId)
-      refreshTimeoutId = null
+      clearTimeout(refreshTimeoutId);
+      refreshTimeoutId = null;
     }
-  }
 
-  const updateAccessToken = (newAccess) => {
-    const refresh = localStorage.getItem('refreshToken')
-    if (!refresh) {
-      logoutUser()
-      return
-    }
-    fetchUserProfile(newAccess).then((profile) => {
-      if (profile) {
-        setUser(profile)
-        localStorage.setItem('accessToken', newAccess)
-        scheduleSilentRefresh(newAccess, refresh)
-      } else {
-        logoutUser()
-      }
-    })
-  }
-
-  const scheduleSilentRefresh = (accessToken, refreshToken) => {
-    if (!accessToken || !refreshToken) return
-
-    let decoded
     try {
-      decoded = jwtDecode(accessToken)
-    } catch (e) {
-      logoutUser()
-      return
+      await api.post('logout/'); // Safe logout view with refresh token handling
+    } catch (err) {
+      console.warn('[AuthContext] Logout API failed:', err.response || err);
     }
 
-    const expiresAt = decoded.exp * 1000
-    const buffer = 60 * 1000
-    const delay = expiresAt - Date.now() - buffer
+    if (redirect) {
+      window.location.href = '/user/auth/';
+    }
+  };
 
-    if (delay <= 0 || isNaN(delay)) return
+  const refreshAccessToken = async () => {
+    try {
+      const res = await api.post('token/refresh/', {}, { withCredentials: true });
+      const { access } = res.data;
+      localStorage.setItem('accessToken', access);
 
-    if (refreshTimeoutId) clearTimeout(refreshTimeoutId)
-
-    refreshTimeoutId = setTimeout(async () => {
-      try {
-        const res = await api.post('token/refresh/', { refresh: refreshToken })
-        const { access, refresh: newRefresh } = res.data
-        localStorage.setItem('accessToken', access)
-        localStorage.setItem('refreshToken', newRefresh)
-
-        const profile = await fetchUserProfile(access)
-        if (profile) {
-          setUser(profile)
-          scheduleSilentRefresh(access, newRefresh)
-        } else {
-          logoutUser()
-        }
-      } catch (err) {
-        logoutUser()
+      const profile = await fetchUserProfile(access);
+      if (profile) {
+        setUser(profile);
+        scheduleSilentRefresh(access);
+      } else {
+        console.warn('[AuthContext] Silent refresh: profile fetch failed.');
+        localStorage.removeItem('accessToken');
+        setUser(null);
       }
-    }, delay)
-  }
+
+      return access;
+    } catch (err) {
+      console.error('[AuthContext] Token refresh failed:', err.response || err);
+      localStorage.removeItem('accessToken');
+      setUser(null);
+      return null;
+    }
+  };
+
+  const updateAccessToken = async () => {
+    await refreshAccessToken();
+  };
+
+  const scheduleSilentRefresh = (accessToken) => {
+    if (!accessToken) return;
+
+    let decoded;
+    try {
+      decoded = jwtDecode(accessToken);
+    } catch (e) {
+      console.error('[AuthContext] Failed to decode access token.');
+      localStorage.removeItem('accessToken');
+      setUser(null);
+      return;
+    }
+
+    const expiresAt = decoded.exp * 1000;
+    const delay = expiresAt - Date.now() - BUFFER_TIME_MS;
+
+    if (delay <= 0 || isNaN(delay)) {
+      refreshAccessToken(); // Immediate refresh if expired or invalid
+      return;
+    }
+
+    if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
+
+    refreshTimeoutId = setTimeout(() => {
+      refreshAccessToken();
+    }, delay);
+  };
 
   useEffect(() => {
-    setUpdateAccessTokenCallback(updateAccessToken)
+    setUpdateAccessTokenCallback(updateAccessToken);
 
-    const access = localStorage.getItem('accessToken')
-    const refresh = localStorage.getItem('refreshToken')
+    const tryLoad = async () => {
+      const access = localStorage.getItem('accessToken');
+      const hasLoggedIn = localStorage.getItem('hasLoggedIn') === 'true';
 
-    if (access && refresh) {
-      fetchUserProfile(access).then((profile) => {
+      if (access) {
+        const profile = await fetchUserProfile(access);
         if (profile) {
-          setUser(profile)
-          scheduleSilentRefresh(access, refresh)
-        } else {
-          logoutUser()
+          setUser(profile);
+          scheduleSilentRefresh(access);
+        } else if (hasLoggedIn) {
+          await refreshAccessToken();
         }
-        setLoading(false)
-      })
-    } else {
-      setLoading(false)
-    }
-  }, [])
+      } else if (hasLoggedIn) {
+        // Attempt refresh if user has logged in before
+        await refreshAccessToken();
+      }
+
+      setLoading(false);
+    };
+
+    tryLoad();
+
+    return () => {
+      if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
+    };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loginUser, logoutUser, updateAccessToken, loading }}>
       {children}
     </AuthContext.Provider>
-  )
-}
+  );
+};
 
-export const useAuth = () => useContext(AuthContext)
+export const useAuth = () => useContext(AuthContext);

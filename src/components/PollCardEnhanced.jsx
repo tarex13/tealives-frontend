@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { votePoll } from '../requests';
 import { useNotification } from '../context/NotificationContext';
-import classNames from 'classnames';
 import { FaCheckCircle } from 'react-icons/fa';
 
 const PollCardEnhanced = ({ pollData }) => {
@@ -12,11 +11,8 @@ const PollCardEnhanced = ({ pollData }) => {
   const [timeLeft, setTimeLeft] = useState('');
   const [isExpired, setIsExpired] = useState(false);
 
-  // 🕒 Countdown Timer Logic
   useEffect(() => {
-    const calculateTimeLeft = () => {
-      if (!pollData.expires_at) return;
-
+    const updateTimer = () => {
       const expiry = new Date(pollData.expires_at);
       const now = new Date();
       const diff = expiry - now;
@@ -24,117 +20,83 @@ const PollCardEnhanced = ({ pollData }) => {
       if (diff <= 0) {
         setIsExpired(true);
         setTimeLeft('Expired');
-        return;
+      } else {
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(`${h}h ${m}m ${s}s`);
       }
-
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
     };
 
-    calculateTimeLeft();
-
-    const timer = setInterval(calculateTimeLeft, 1000);
-    return () => clearInterval(timer);
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
   }, [pollData.expires_at]);
 
   const handleVote = async (optionId) => {
     if (isVoting || isExpired) return;
-
-    const isUnvoting = votedOptionId === optionId;
     setIsVoting(true);
 
     try {
-      const updatedOptions = options.map(opt => {
+      const unvote = optionId === votedOptionId;
+      const updated = options.map(opt => {
         if (opt.id === optionId) {
-          return { ...opt, votes_count: opt.votes_count + (isUnvoting ? -1 : 1) };
-        } else if (!isUnvoting && opt.id === votedOptionId) {
+          return { ...opt, votes_count: opt.votes_count + (unvote ? -1 : 1) };
+        }
+        if (opt.id === votedOptionId) {
           return { ...opt, votes_count: opt.votes_count - 1 };
         }
         return opt;
       });
-
-      setOptions(updatedOptions);
-      setVotedOptionId(isUnvoting ? null : optionId);
-
+      setOptions(updated);
+      setVotedOptionId(unvote ? null : optionId);
       await votePoll(pollData.id, optionId);
-      showNotification(isUnvoting ? 'Vote removed.' : 'Vote submitted successfully!', 'success');
-    } catch (error) {
-      console.error('Error voting on poll:', error);
-      showNotification('Failed to process vote. Please try again.', 'error');
-      setOptions(pollData.options);
-      setVotedOptionId(pollData.user_vote || null);
+      showNotification('Vote updated!', 'success');
+    } catch {
+      showNotification('Error voting. Try again.', 'error');
     } finally {
       setIsVoting(false);
     }
   };
 
-  const totalVotes = options.reduce((sum, opt) => sum + opt.votes_count, 0);
-  const formattedExpiry = pollData.expires_at 
-    ? new Date(pollData.expires_at).toLocaleString('en-US', { timeZoneName: 'short' })
-    : null;
+  const totalVotes = options.reduce((sum, o) => sum + o.votes_count, 0);
 
   return (
-    <div className="p-4 border rounded-xl shadow mb-4 bg-white">
+    <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-white p-4 rounded-lg shadow-md mb-6 transition">
       <h3 className="text-lg font-semibold mb-2">{pollData.post_title}</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Expires: {new Date(pollData.expires_at).toLocaleString()}</p>
+      <p className={`text-sm font-semibold mb-4 ${isExpired ? 'text-red-600' : 'text-blue-600'}`}>
+        {timeLeft}
+      </p>
 
-      {pollData.expires_at && (
-        <>
-          <div className="text-sm text-gray-500 mb-1">
-            Expires At: {formattedExpiry}
-          </div>
-          <div className="text-sm text-gray-500 mb-4">
-            {isExpired ? 'Poll expired.' : `Time left: ${timeLeft}`}
-          </div>
-        </>
-      )}
-
-      {options.map(option => {
-        const percentage = totalVotes > 0 ? (option.votes_count / totalVotes) * 100 : 0;
-        const isSelected = option.id === votedOptionId;
+      {options.map(opt => {
+        const percent = totalVotes > 0 ? (opt.votes_count / totalVotes) * 100 : 0;
+        const selected = opt.id === votedOptionId;
 
         return (
-          <div key={option.id} className="mb-3">
+          <div key={opt.id} className="mb-3">
             <button
-              onClick={() => handleVote(option.id)}
+              onClick={() => handleVote(opt.id)}
               disabled={isVoting || isExpired}
-              aria-pressed={isSelected}
-              aria-label={`Vote for ${option.text}`}
-              className={classNames(
-                'w-full text-left p-3 rounded-lg transition relative focus:outline-none focus:ring-2 focus:ring-blue-500 flex justify-between items-center',
-                {
-                  'bg-blue-100 border border-blue-500': isSelected,
-                  'bg-gray-100 hover:bg-gray-200': !isSelected,
-                  'opacity-50 cursor-not-allowed': isVoting || isExpired,
-                }
-              )}
+              className={`w-full px-3 py-2 rounded-lg flex justify-between items-center text-left transition 
+              ${selected ? 'bg-blue-100 text-blue-900 dark:bg-blue-700 dark:text-white' : 'bg-gray-100 dark:bg-gray-800'} 
+              border border-gray-300 dark:border-gray-700 focus:outline-none`}
             >
-              <span>
-                {option.emoji ? `${option.emoji} ` : ''}
-                {option.text}
-              </span>
+              <span>{opt.emoji} {opt.text}</span>
               <span className="flex items-center gap-2">
-                {Math.round(percentage)}%
-                {isSelected && <FaCheckCircle className="text-blue-600 animate-bounce" />}
+                {Math.round(percent)}% {selected && <FaCheckCircle className="text-blue-600 dark:text-white" />}
               </span>
             </button>
-
-            <div className="w-full bg-gray-300 h-2 rounded mt-1">
-              <div
-                className="h-2 bg-blue-500 rounded transition-all duration-500"
-                style={{ width: `${percentage}%` }}
-                title={`${percentage.toFixed(2)}%`}
-              ></div>
+            <div className="h-2 bg-gray-300 dark:bg-gray-600 rounded mt-1">
+              <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${percent}%` }} />
             </div>
           </div>
         );
       })}
 
-      <div className="text-sm text-gray-600 mt-4">
-        {totalVotes > 0 ? `${totalVotes} total vote${totalVotes !== 1 ? 's' : ''}` : 'No votes yet.'}
-      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
+        {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
+      </p>
     </div>
   );
 };

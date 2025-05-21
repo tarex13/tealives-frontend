@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Spinner from './components/Spinner';
 import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
 import Home from './pages/Home';
-
 import GroupDirectory from './pages/GroupDirectory';
 import Marketplace from './pages/Marketplace';
 import Event from './pages/Event';
@@ -36,68 +35,88 @@ import PrivacySettings from './components/Settings/PrivacySettings';
 import PreferencesSettings from './components/Settings/PreferencesSettings';
 import AccountDelete from './components/Settings/AccountDelete';
 import ErrorBoundary from './components/ErrorBoundary';
+import InviteMembers from './components/InviteMembers';
 import ResetPass from './components/Settings/ResetPass';
+
+import GroupMembersList from './pages/GroupMembersList';
+import GroupJoinRequests from './pages/GroupJoinRequests';
+import GroupEventsPage from './pages/GroupEventsPage';
+import GroupPollsPage from './pages/GroupPollsPage';
 import { NotificationProvider } from './context/NotificationContext';
+import GroupPage from './pages/GroupPage'; 
+import ModDashboard from './pages/ModDashboard'; 
+import GroupPostCreate from './pages/GroupPostCreate';
+import CreateGroup from './pages/CreateGroup';
+import GroupDetailPage from './components/GroupDetailPage';
 
 function App() {
   const { user, loading } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  const [sidebarOpen, setSidebarOpen] = useState(() => { return localStorage.getItem('sidebarOpen') === 'true'});
+  useEffect(() => {localStorage.setItem('sidebarOpen', sidebarOpen)}, [sidebarOpen]);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-
-  if (loading) {
-    return null;
-  }
-
+  if (loading) return null;
   return (
     <ErrorBoundary>
       <NotificationProvider>
-      <div className="min-h-screen bg-gray-50 text-gray-800 flex">
-        {user && <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />}
-        <div className="flex-1 ml-0">
-          <Navbar toggleSidebar={toggleSidebar} />
-          <div style={{paddingTop: '5vw'}}>
-          <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/user/auth" element={<Login />} />
-          <Route path="/marketplace" element={<Marketplace />} />
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/event/:id" element={<Event />} />
-          <Route path="/profile/:id" element={<PublicProfile />} />
-          <Route path="/feedback" element={<FeedbackForm />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/groups" element={<GroupDirectory />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
+        <div className="min-h-screen py-10 bg-gray-50 dark:bg-gray-600 text-gray-800 dark:text-white flex relative">
+          {user &&  (
+            <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
+          )}
 
-          {/* Protected Routes */}
-          <Route element={<PrivateRoute />}>
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/profile/edit" element={<EditProfile />} />
-            <Route path="/marketplace/create" element={<CreateListing />} />
-            <Route path="/inbox" element={<Inbox />} />
-            <Route path="/my-swapps" element={<MySwapps />} />
-            <Route path="/saved" element={<SavedListings />} />
-            <Route path="/events/create" element={<CreateEvent />} />
-            <Route path="/mod" element={<ModPanel />} />
-            <Route path="/mod/feedback" element={<AdminFeedback />} />
-            <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
-            <Route path="/settings/profile" element={<ProfileSettings />} />
-            <Route path="/settings/reset" element={<ResetPass />} />
-            <Route path="/settings/notifications" element={<NotificationSettings />} />
-            <Route path="/settings/privacy" element={<PrivacySettings />} />
-            <Route path="/settings/preferences" element={<PreferencesSettings />} />
-            <Route path="/settings/delete" element={<AccountDelete />} />
-          </Route>
+          <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'sm:ml-64' : 'ml-0'}`}>
+            <Navbar toggleSidebar={toggleSidebar} />
 
-          {/* 404 Not Found */}
-          <Route path="*" element={<PageNotFound />} />
-        </Routes>
+            <main className="px-2 sm:px-4 pt-[5vh] pb-10">
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<Home />} />
+                {/*<Route path="/login" element={<Login />} />*/}
+                <Route path="/user/auth" element={<Login  isOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}/>} />
+                <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/event/:id" element={<Event />} />
+                <Route path="/profile/:id" element={<PublicProfile />} />
+                <Route path="/feedback" element={<FeedbackForm />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/groups" element={<GroupDirectory />} />
+                <Route path="/groups/:id" element={<GroupDetailPage />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+
+                {/* Protected Routes */}
+                <Route element={<PrivateRoute />}>
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/profile/edit" element={<EditProfile />} />
+                  <Route path="/inbox" element={<Inbox />} />
+                  <Route path="/saved" element={<SavedListings />} />
+                  <Route path="/my-swapps" element={<MySwapps />} />
+                  <Route path="/events/create" element={<CreateEvent />} />
+                  <Route path="/marketplace/create" element={<CreateListing />} />
+                  <Route path="/mod/dashboard" element={<ModDashboard />} />
+                  <Route path="/mod" element={<ModPanel />} />
+                  <Route path="/mod/feedback" element={<AdminFeedback />} />
+                  <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
+                  <Route path="/groups/create" element={<CreateGroup />} />
+                  <Route path="/groups/:groupId/invite" element={<InviteMembers />} />
+                  <Route path="/groups/:id/posts/create" element={<GroupPostCreate />} />
+                  <Route path="/groups/:id/events" element={<GroupEventsPage />} />
+                  <Route path="/groups/:id/polls" element={<GroupPollsPage />} />
+                  <Route path="/groups/:id/members" element={<GroupMembersList />} />
+                  <Route path="/groups/:id/join-requests" element={<GroupJoinRequests />} />
+                  <Route path="/settings/profile" element={<ProfileSettings />} />
+                  <Route path="/settings/reset" element={<ResetPass />} />
+                  <Route path="/settings/notifications" element={<NotificationSettings />} />
+                  <Route path="/settings/privacy" element={<PrivacySettings />} />
+                  <Route path="/settings/preferences" element={<PreferencesSettings />} />
+                  <Route path="/settings/delete" element={<AccountDelete />} />
+                </Route>
+
+                {/* 404 */}
+                <Route path="*" element={<PageNotFound />} />
+              </Routes>
+            </main>
+          </div>
         </div>
-      </div>
-    </div>
-    </NotificationProvider>
+      </NotificationProvider>
     </ErrorBoundary>
   );
 }

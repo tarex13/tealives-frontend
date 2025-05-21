@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useCity } from '../context/CityContext';
-import '../css/CitySelectorModal.css'
 import { CITIES } from '../../constants';
+
 function CitySelectorModal() {
   const { city, setCity } = useCity();
   const [visible, setVisible] = useState(false);
@@ -10,14 +10,11 @@ function CitySelectorModal() {
   useEffect(() => {
     if (!city) {
       setVisible(true);
-      document.body.style.overflow = 'hidden'; // Prevent background scroll
+      document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
-
-    return () => {
-      document.body.style.overflow = 'auto'; // Cleanup on unmount
-    };
+    return () => (document.body.style.overflow = 'auto');
   }, [city]);
 
   const handleSelect = (e) => {
@@ -34,33 +31,31 @@ function CitySelectorModal() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center transition-opacity duration-300">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg text-center w-11/12 max-w-sm animate-fade-in-up">
-        <h2 className="text-xl font-bold mb-4">Choose Your Community</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-xl w-11/12 max-w-sm animate-fade-in-up">
+        <h2 className="text-xl font-bold text-center mb-4 text-gray-800 dark:text-gray-200">🌆 Choose Your Community</h2>
         <select
           onChange={handleSelect}
-          className="p-2 rounded border w-full focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 mb-4"
           defaultValue="Select"
+          className="block w-full p-2 mb-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
         >
-          <option disabled value="Select">Select</option>
-          {CITIES.map((cityName) => (
-    <option key={cityName} value={cityName}>
-      {cityName.charAt(0).toUpperCase() + cityName.slice(1)}
-    </option>
-  ))}
+          <option disabled value="Select">Select a city</option>
+          {CITIES.map(city => (
+            <option key={city} value={city}>{city.charAt(0).toUpperCase() + city.slice(1)}</option>
+          ))}
         </select>
 
-        <label className="flex items-center justify-center space-x-2 text-gray-700 dark:text-gray-300 text-sm mb-4">
+        <label className="flex items-center gap-2 mb-4 text-gray-600 dark:text-gray-300 text-sm justify-center">
           <input
             type="checkbox"
             checked={rememberCity}
             onChange={(e) => setRememberCity(e.target.checked)}
-            className="accent-blue-600"
+            className="accent-blue-500"
           />
-          <span>Remember my city</span>
+          Remember my city
         </label>
 
-        <p className="text-gray-500 text-sm">You can always change this later from the city selector.</p>
+        <p className="text-center text-xs text-gray-400 dark:text-gray-500">You can always change this later.</p>
       </div>
     </div>
   );

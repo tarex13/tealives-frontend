@@ -1,84 +1,84 @@
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function Sidebar({ isOpen, toggleSidebar }) {
   const { user } = useAuth();
-
   const isAdmin = user?.is_superuser;
   const isStaff = user?.is_staff;
   const isModerator = user?.is_moderator;
   const isBusiness = user?.is_business;
 
   const linkClasses = ({ isActive }) =>
-    `block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${
-      isActive ? 'bg-gray-300 dark:bg-gray-700 font-semibold' : ''
-    }`;
+    `block w-full text-sm px-3 py-2 rounded-lg transition-all duration-200 font-medium
+     ${isActive ? 'bg-blue-100 dark:bg-blue-400  text-blue-900 dark:text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300'}`;
 
   return (
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden"
           onClick={toggleSidebar}
         ></div>
       )}
-      <div
-        style={{ top: '4vw', zIndex: '0', position: 'fixed', overflow:'auto', color: '#fff' }}
-        className={`fixed top-0 left-0 h-full w-64 bg-gray-100 text-black dark:bg-gray-800 p-4 z-50 transform  ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } transition-transform duration-300 md:translate-x-0 md:static md:block`}
-      >
-        <h2 className="text-lg font-bold mb-4 text-black">Navigation</h2>
-        <ul className="space-y-2 text-black">
-                {user && <NavLink to="/profile" className={linkClasses}>My Profile</NavLink>}
-          {user && <li><NavLink to="/inbox" className={linkClasses}>Inbox</NavLink></li>}
-          {user && <li><NavLink to="/saved" className={linkClasses}>Saved</NavLink></li>}
+<aside
+  className={`
+    fixed top-[4.5vh] left-0 h-[calc(100vh-4.5vh)] w-64 
+    p-6 bg-white dark:bg-gray-900 text-black dark:text-white py-1
+    shadow-xl z-50 overflow-y-auto transition-transform duration-300
+    ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
+    md:translate-x-0
+  `}
+>
+        <h2 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-100">Menu</h2>
+
+        <nav className="space-y-2">
+          {user && <NavLink to="/profile" className={linkClasses}>My Profile</NavLink>}
+          {user && <NavLink to="/inbox" className={linkClasses}>Inbox</NavLink>}
+          {user && <NavLink to="/saved" className={linkClasses}>Saved</NavLink>}
 
           {user && (
             <>
-              <h3 className="text-md font-semibold mt-4">Settings</h3>
-              <li><NavLink to="/settings/profile" className={linkClasses}>Edit Profile</NavLink></li>
-              <li><NavLink to="/settings/ResetPass" className={linkClasses}>Reset Password</NavLink></li>
-              <li><NavLink to="/settings/notifications" className={linkClasses}>Notifications</NavLink></li>
-              <li><NavLink to="/settings/privacy" className={linkClasses}>Privacy</NavLink></li>
-              <li><NavLink to="/settings/preferences" className={linkClasses}>Preferences</NavLink></li>
-              <li>
-                <NavLink
-                  to="/settings/delete"
-                  className={({ isActive }) => `${linkClasses({ isActive })} text-red-600`}
-                >
-                  Delete Account
-                </NavLink>
-              </li>
+              <h3 className="mt-6 mb-2 text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Settings</h3>
+              <NavLink to="/settings/profile" className={linkClasses}>Edit Profile</NavLink>
+              <NavLink to="/settings/reset" className={linkClasses}>Reset Password</NavLink>
+              <NavLink to="/settings/notifications" className={linkClasses}>Notifications</NavLink>
+              <NavLink to="/settings/privacy" className={linkClasses}>Privacy</NavLink>
+              <NavLink to="/settings/preferences" className={linkClasses}>Preferences</NavLink>
+              <NavLink to="/settings/delete" className={`${linkClasses({ isActive: false })} text-red-600 hover:text-red-700`}>
+                Delete Account
+              </NavLink>
             </>
           )}
 
-          {(isModerator || isStaff || isAdmin) && (
-            <li>
-              <NavLink to="/mod/feedback" className="text-red-600 font-semibold hover:underline">
+          {(isAdmin || isStaff || isModerator) && (
+            <>
+              <h3 className="mt-6 mb-2 text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Moderation</h3>
+              <NavLink to="/mod/dashboard" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
+                Moderator Dashboard
+              </NavLink>
+              <NavLink to="/mod/feedback" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
                 Feedback Admin
               </NavLink>
-            </li>
+              <NavLink to="/mod/" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
+                Reported Users
+              </NavLink>
+            </>
           )}
 
           {isAdmin && (
-            <li>
-              <NavLink to="/admin/dashboard" className="text-red-700 font-bold hover:underline">
-                Admin Dashboard
-              </NavLink>
-            </li>
+            <NavLink to="/admin/dashboard" className="block mt-6 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-800 text-red-700 dark:text-white font-bold hover:bg-red-200 dark:hover:bg-red-700 transition">
+              Admin Dashboard
+            </NavLink>
           )}
 
           {isBusiness && (
-            <li>
-              <NavLink to="/business/dashboard" className="text-green-600 font-semibold hover:underline">
-                Business Dashboard
-              </NavLink>
-            </li>
+            <NavLink to="/business/dashboard" className="block mt-4 px-3 py-2 rounded-lg bg-green-100 dark:bg-green-800 text-green-700 dark:text-white font-semibold hover:bg-green-200 dark:hover:bg-green-700 transition">
+              Business Dashboard
+            </NavLink>
           )}
-        </ul>
-      </div>
+        </nav>
+      </aside>
     </>
   );
 }

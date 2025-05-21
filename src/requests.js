@@ -93,19 +93,83 @@ export const fetchReports = () => api.get('reports/').then(res => res.data);
 export const handleReport = (id, action) => api.patch(`report/${id}/`, { action });
 
 // 📚 Groups
-export const joinGroup = (groupId) => api.post(`groups/${groupId}/join/`);
-export const leaveGroup = (groupId) => api.post(`groups/${groupId}/leave/`);
-export const createGroup = (data) => api.post('groups/', data);
+export const getJoinRequests = (groupId) => api.get(`/groups/${groupId}/join_requests/`);
+export const approveJoinRequest = (groupId, requestId) => api.post(`/groups/${groupId}/join_requests/${requestId}/approve/`);
+export const declineJoinRequest = (groupId, requestId) => api.post(`/groups/${groupId}/join_requests/${requestId}/decline/`);
+
+export const getGroupMembers = (groupId) => api.get(`/groups/${groupId}/members/`);
+export const promoteModerator = (groupId, userId) => api.post(`/groups/${groupId}/members/${userId}/promote/`);
+export const demoteModerator = (groupId, userId) => api.post(`/groups/${groupId}/members/${userId}/demote/`);
+export const removeGroupMember = (groupId, userId) => api.post(`/groups/${groupId}/members/${userId}/remove/`);
+
+export const getGroups = (params = {}) => api.get(`/groups/`, { params });
+export const joinGroup = (groupId) => api.post(`/groups/${groupId}/join/`);
+export const leaveGroup = (groupId) => api.post(`/groups/${groupId}/leave/`);
+
+export const createGroupPost = (groupId, data) => api.post(`/groups/${groupId}/posts/`, data);
+export const createGroupEvent = (groupId, data) => api.post(`/groups/${groupId}/events/`, data);
+export const createGroup = async (data) => {
+  const response = await api.post('groups/', data);
+  
+  // Automatically join the group after creation if the API doesn't do it
+  const groupId = response.data.id;
+  if (groupId) {
+    try {
+      await api.post(`/groups/${groupId}/join/`);
+    } catch (err) {
+      console.warn('Failed to auto-join group after creation:', err);
+    }
+  }
+
+  return response.data;
+};
+
+export const getGroupDetail = (groupId) => 
+  api.get(`groups/${groupId}/`).then(res => res.data);
+export const getGroupPosts = (groupId) => 
+  api.get(`groups/${groupId}/posts/`).then(res => res.data);
 
 export const fetchGroupMessages = (groupId) => 
   api.get(`groups/${groupId}/messages/`).then(res => res.data);
 
 export const sendGroupMessage = (groupId, content) => 
   api.post(`groups/${groupId}/messages/`, { content });
+// Group Events
+export const getGroupEvents = (groupId) => api.get(`groups/${groupId}/events/`).then(res => res.data);
+
+// Group Polls
+export const getGroupPolls = (groupId) => api.get(`groups/${groupId}/polls/`).then(res => res.data);
+export const votePollOption = (pollId, selectedOptionId) => api.post(`poll/vote/`, { poll: pollId, selected_option: selectedOptionId });
 
 export const sendReaction = (postId, emoji) => api.post('reactions/', { post: postId, emoji });
 
 export const toggleRSVP = (eventId) => api.patch(`events/${eventId}/rsvp/`);
+
+// 🧑‍⚖️ Moderator APIs
+export const fetchPendingGroups = () => api.get('groups/pending/');
+
+export const approveGroup = (groupId) => 
+    api.post(`groups/${groupId}/approve/`);
+
+export const rejectGroup = (groupId) => 
+    api.post(`groups/${groupId}/reject/`);
+
+export const fetchGroupsPendingDeletion = () => 
+    api.get('groups/pending-deletion/');
+
+export const finalizeGroupDeletion = (groupId) => 
+    api.post(`groups/${groupId}/final-delete/`);
+
+export const cancelGroupDeletion = (groupId) => 
+    api.post(`groups/${groupId}/cancel-delete/`);
+
+// 🙋 Member Action
+export const voteToDeleteGroup = (groupId) => 
+    api.post(`groups/${groupId}/vote-delete/`);
+
+export const inviteMembers = (groupId, userIds) => 
+    api.post(`/groups/${groupId}/invite/`, { user_ids: userIds });
+  
 
 export const fetchPosts = (city, sort = 'newest', url = null) => 
   url ? api.get(url).then(res => res.data) : api.get(`posts/?city=${city}&sort=${sort}`).then(res => res.data);
