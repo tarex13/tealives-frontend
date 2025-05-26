@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getGroups, createGroup } from '../requests';
 import GroupCard from '../components/GroupCard';
+import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 
 // ✅ Toast Hook Implementation
@@ -17,7 +18,7 @@ function useToast() {
   };
 
   const ToastContainer = () => (
-    <div className="fixed top-4 right-4 space-y-2 z-50">
+    <div className="fixed top-15 right-4 space-y-2 z-50">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -87,6 +88,8 @@ export default function GroupsPage() {
   const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const { toast, ToastContainer } = useToast();
+  
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     fetchGroups();
@@ -98,7 +101,7 @@ export default function GroupsPage() {
       setGroups(response.data.results);
     } catch (err) {
       console.error(err);
-      toast({ title: 'Error fetching groups.' });
+      showNotification('Error fetching groups.', 'error');
     }
   };
 
@@ -132,7 +135,7 @@ export default function GroupsPage() {
       setFilteredGroups(prev => [newGroup, ...prev]);
     } catch (err) {
       console.error(err);
-      toast({ title: 'Failed to create group.' });
+      showNotification('Failed to create group.' , 'error');
     } finally {
       setIsCreating(false);
     }

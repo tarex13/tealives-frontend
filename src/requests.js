@@ -171,6 +171,13 @@ export const inviteMembers = (groupId, userIds) =>
     api.post(`/groups/${groupId}/invite/`, { user_ids: userIds });
   
 
+export const submitBid = (data) => api.post('marketplace/bids/', data);
+export const fetchBidsForItem = (itemId) => api.get(`marketplace/${itemId}/bids/`).then(res => res.data);
+export const takeBidAction = (bidId, action) =>
+  api.post(`marketplace/bids/${bidId}/action/`, { action });
+
+export const rateUser = (data) => api.post('user/rate/', data);
+export const fetchRatings = (userId) => api.get(`/ratings/?user_id=${userId}`);
 export const fetchPosts = (city, sort = 'newest', url = null) => 
   url ? api.get(url).then(res => res.data) : api.get(`posts/?city=${city}&sort=${sort}`).then(res => res.data);
 
@@ -199,5 +206,8 @@ export const logout = async () => {
     console.warn('Failed to logout cleanly.', err);
   }
   localStorage.removeItem('user');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('hasLoggedIn');
+  localStorage.setItem('sidebarOpen', 'false');
   localStorage.removeItem('userToken');
 };

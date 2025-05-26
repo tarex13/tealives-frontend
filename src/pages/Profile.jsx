@@ -79,7 +79,7 @@ function Profile() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
           <p className="text-lg font-semibold">{posts.length}</p>
           <p className="text-gray-500 text-sm">Posts</p>
@@ -91,14 +91,6 @@ function Profile() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
           <p className="text-lg font-semibold">{saved.length}</p>
           <p className="text-gray-500 text-sm">Saved</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-          <button
-            onClick={() => window.location.reload()}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            🔄 Refresh Feed
-          </button>
         </div>
       </div>
 

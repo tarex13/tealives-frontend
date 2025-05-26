@@ -53,6 +53,19 @@ function TermsPage() {
             <li>Tealives is not responsible for damages, disputes, or payments arising from trades</li>
           </ul>
         </section>
+
+        <section className="mb-8">
+        <h2 className="text-xl font-bold mb-2">6. Auctions & Bidding</h2>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>All bids placed on auction items are considered binding commitments.</li>
+          <li>If you win a bid, you must confirm the purchase within 48 hours. Failure to do so will result in forfeiting the item and a potential bidding restriction.</li>
+          <li>Repeated failure to complete winning bids may result in a bidding suspension or permanent removal from auction participation.</li>
+          <li>If the highest bidder forfeits, the item may automatically be offered to the next-highest bidder.</li>
+          <li>Sellers may choose to set a “Buy Now” price to allow instant purchases during bidding.</li>
+          <li>Bid manipulation, false bids, or using secondary accounts to affect outcomes is strictly prohibited.</li>
+        </ul>
+      </section>
+
   
         <section className="mb-8">
           <h2 className="text-xl font-bold mb-2">6. Events and Groups</h2>

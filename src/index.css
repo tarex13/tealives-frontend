@@ -41,6 +41,10 @@
   scrollbar-color: #9ca3af #e5e7eb;
 }
 
+.input-style {
+  @apply w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-400 transition;
+}
+
 .dark * {
   scrollbar-color: #4b5563 #374151;
 }

@@ -11,7 +11,7 @@ function Sidebar({ isOpen, toggleSidebar }) {
 
   const linkClasses = ({ isActive }) =>
     `block w-full text-sm px-3 py-2 rounded-lg transition-all duration-200 font-medium
-     ${isActive ? 'bg-blue-100 dark:bg-blue-400  text-blue-900 dark:text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300'}`;
+     ${isActive ? 'bg-blue-100 dark:bg-blue-600  text-blue-900 dark:text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300'}`;
 
   return (
     <>
@@ -23,8 +23,8 @@ function Sidebar({ isOpen, toggleSidebar }) {
       )}
 <aside
   className={`
-    fixed top-[4.5vh] left-0 h-[calc(100vh-4.5vh)] w-64 
-    p-6 bg-white dark:bg-gray-900 text-black dark:text-white py-1
+    fixed top-[8vh] left-0 h-[calc(100vh-10vh)] w-64 
+    p-6 bg-white dark:bg-gray-900 text-black dark:text-white py-2
     shadow-xl z-50 overflow-y-auto transition-transform duration-300
     ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
     md:translate-x-0
@@ -45,9 +45,7 @@ function Sidebar({ isOpen, toggleSidebar }) {
               <NavLink to="/settings/notifications" className={linkClasses}>Notifications</NavLink>
               <NavLink to="/settings/privacy" className={linkClasses}>Privacy</NavLink>
               <NavLink to="/settings/preferences" className={linkClasses}>Preferences</NavLink>
-              <NavLink to="/settings/delete" className={`${linkClasses({ isActive: false })} text-red-600 hover:text-red-700`}>
-                Delete Account
-              </NavLink>
+
             </>
           )}
 

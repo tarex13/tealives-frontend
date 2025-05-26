@@ -17,7 +17,7 @@ function Navbar({ toggleSidebar }) {
     }`;
 
   return (
-    <nav className="fixed top-0 left-0 w-full z-50 bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm py-2 px-1 sm:px-4 flex justify-between items-center">
+    <nav className="fixed h-[8vh] top-0 left-0 w-full z-50 bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm py-2 lg:py-1 px-1 sm:px-4 flex justify-between items-center">
       <Link to="/" className="sm:text-xl text-sm font-bold text-blue-600 dark:text-blue-400">
         Tealives
       </Link>
@@ -29,7 +29,7 @@ function Navbar({ toggleSidebar }) {
         <NavLink to="/groups" className={linkClasses}>Groups</NavLink>
         <NavLink to="/feedback" className={(navData) => `${linkClasses(navData)} hidden md:inline-block`}>Feedback</NavLink>
         <NavLink to="/leaderboard" className={(navData) => `${linkClasses(navData)} hidden sm:inline-block`}>Leaderboard</NavLink>
-        <NavLink to="/terms" className={(navData) => `${linkClasses(navData)} hidden sm:inline-block`}>Terms</NavLink>
+        <NavLink to="/terms" className={(navData) => `${linkClasses(navData)} hidden lg:inline-block`}>Terms</NavLink>
 
         {user && <NotificationDropdown />}
 

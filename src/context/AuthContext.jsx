@@ -37,10 +37,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logoutUser = async ({ redirect = true } = {}) => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('hasLoggedIn');
-    localStorage.removeItem('userToken');
-    localStorage.removeItem('user');
+    clearStoredAuth();
     localStorage.setItem('sidebarOpen', false)
     setUser(null);
 
@@ -77,14 +74,23 @@ export const AuthProvider = ({ children }) => {
       }
 
       return access;
-    } catch (err) {
+    }   catch (err) {
       console.error('[AuthContext] Token refresh failed:', err.response || err);
-      localStorage.removeItem('accessToken');
+      clearStoredAuth();
       setUser(null);
+      // Add this line:
+      clearTimeout(refreshTimeoutId);
+      refreshTimeoutId = null;
+  
       return null;
     }
   };
-
+  const clearStoredAuth = () => {
+    ['accessToken', 'hasLoggedIn', 'userToken', 'user'].forEach(key =>
+      localStorage.removeItem(key)
+    );
+    localStorage.setItem('sidebarOpen', 'false')
+  };
   const updateAccessToken = async () => {
     await refreshAccessToken();
   };
@@ -97,7 +103,7 @@ export const AuthProvider = ({ children }) => {
       decoded = jwtDecode(accessToken);
     } catch (e) {
       console.error('[AuthContext] Failed to decode access token.');
-      localStorage.removeItem('accessToken');
+      clearStoredAuth();
       setUser(null);
       return;
     }

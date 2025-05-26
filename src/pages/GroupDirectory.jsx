@@ -14,6 +14,7 @@ export default function GroupDirectory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('newest');
+
   const [selectedGroup, setSelectedGroup] = useState(null);
 
   const navigate = useNavigate();

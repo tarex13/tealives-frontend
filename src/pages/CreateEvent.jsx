@@ -60,7 +60,7 @@ function CreateEvent() {
       formData.append('title', form.title);
       formData.append('description', form.description);
       formData.append('location', form.location);
-      formData.append('start_time', startTimeUtc.toISOString());
+      formData.append('datetime', startTimeUtc.toISOString());
       formData.append('tags', form.tags);
       if (form.rsvp_limit) formData.append('rsvp_limit', form.rsvp_limit);
       if (form.banner) formData.append('banner', form.banner);

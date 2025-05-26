@@ -11,5 +11,5 @@ export default function PrivateRoute() {
     return <Spinner />;
   }
 
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  return user ? <Outlet /> : <Navigate to="/user/auth" replace />;
 }

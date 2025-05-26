@@ -130,6 +130,9 @@ function PublicProfile() {
               {info.is_verified && <span className="text-blue-500 text-sm">✅ Verified</span>}
               {info.is_business && <span className="text-purple-500 text-sm">🏢 Business</span>}
             </h1>
+            <p className="text-sm text-yellow-600">
+  ⭐ {info.rating_average?.toFixed(1) || 'N/A'} ({info.rating_count || 0} votes)
+</p>
             <p className="text-gray-600 dark:text-gray-300 text-sm">City: {info.city || 'N/A'}</p>
             {info.bio && <p className="text-sm text-gray-500 mt-1">{info.bio}</p>}
             {info.xp !== undefined && (

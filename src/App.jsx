@@ -36,8 +36,9 @@ import PreferencesSettings from './components/Settings/PreferencesSettings';
 import AccountDelete from './components/Settings/AccountDelete';
 import ErrorBoundary from './components/ErrorBoundary';
 import InviteMembers from './components/InviteMembers';
+import BidForm from './components/BidForm';
 import ResetPass from './components/Settings/ResetPass';
-
+import AppInitializer from './AppInitializer';
 import GroupMembersList from './pages/GroupMembersList';
 import GroupJoinRequests from './pages/GroupJoinRequests';
 import GroupEventsPage from './pages/GroupEventsPage';
@@ -48,6 +49,8 @@ import ModDashboard from './pages/ModDashboard';
 import GroupPostCreate from './pages/GroupPostCreate';
 import CreateGroup from './pages/CreateGroup';
 import GroupDetailPage from './components/GroupDetailPage';
+import MarketplaceItemDetail from './pages/MarketplaceItemDetail';
+
 
 function App() {
   const { user, loading } = useAuth();
@@ -58,6 +61,8 @@ function App() {
   return (
     <ErrorBoundary>
       <NotificationProvider>
+        <>
+        <AppInitializer />
         <div className="min-h-screen py-10 bg-gray-50 dark:bg-gray-600 text-gray-800 dark:text-white flex relative">
           {user &&  (
             <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
@@ -81,9 +86,13 @@ function App() {
                 <Route path="/groups" element={<GroupDirectory />} />
                 <Route path="/groups/:id" element={<GroupDetailPage />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/marketplace/:id" element={<MarketplaceItemDetail />} />
+
 
                 {/* Protected Routes */}
                 <Route element={<PrivateRoute />}>
+                <Route path="/marketplace/:id/bid" element={<BidForm />} />
+
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/edit" element={<EditProfile />} />
                   <Route path="/inbox" element={<Inbox />} />
@@ -116,6 +125,7 @@ function App() {
             </main>
           </div>
         </div>
+        </>
       </NotificationProvider>
     </ErrorBoundary>
   );
