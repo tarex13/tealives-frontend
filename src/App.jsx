@@ -50,6 +50,7 @@ import GroupPostCreate from './pages/GroupPostCreate';
 import CreateGroup from './pages/CreateGroup';
 import GroupDetailPage from './components/GroupDetailPage';
 import MarketplaceItemDetail from './pages/MarketplaceItemDetail';
+import BusinessAnalytics from './pages/BusinessAnalytics';
 
 
 function App() {
@@ -92,7 +93,7 @@ function App() {
                 {/* Protected Routes */}
                 <Route element={<PrivateRoute />}>
                 <Route path="/marketplace/:id/bid" element={<BidForm />} />
-
+                <Route path="/business/analytics" element={<BusinessAnalytics />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/edit" element={<EditProfile />} />
                   <Route path="/inbox" element={<Inbox />} />

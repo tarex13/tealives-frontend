@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+// src/pages/Auth.jsx
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, register } from '../requests';
+import {
+  login,
+  register,
+  fetchCities,
+  fetchBusinessTypes,
+} from '../requests';           // <-- make sure you add fetchBusinessTypes
 import { useAuth } from '../context/AuthContext';
 import { FaGoogle, FaFacebook } from 'react-icons/fa';
 import '../css/Auth.css';
@@ -12,25 +18,52 @@ import 'react-phone-number-input/style.css';
 export default function Auth({ isOpen, setSidebarOpen }) {
   const [formType, setFormType] = useState('login'); // login | register | forgot
   const [step, setStep] = useState(0);
+
+  // common
   const [username, setUsername] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
+  const [error, setError] = useState(null);
+
+  // step-1
   const [city, setCity] = useState('');
   const [dob, setDob] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [error, setError] = useState(null);
+
+  // business toggle + fields
+  const [isBusiness, setIsBusiness] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [businessType, setBusinessType] = useState('');
+
+  // dynamic dropdowns
+  const [cities, setCities] = useState([]);
+  const [businessTypes, setBusinessTypes] = useState([]);
 
   const { showNotification } = useNotification();
   const { user, loginUser } = useAuth();
   const navigate = useNavigate();
 
-  if (user != null) {
-    setSidebarOpen(true);
-    showNotification('User already logged in!');
-    navigate('/');
-  }
+  // 1️⃣ redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      setSidebarOpen(true);
+      showNotification('User already logged in!');
+      navigate('/');
+    }
+  }, [user]);
 
+  // 2️⃣ fetch cities & business types
+  useEffect(() => {
+    fetchCities()
+      .then(setCities)
+      .catch(console.error);
+    fetchBusinessTypes()
+      .then(setBusinessTypes)
+      .catch(console.error);
+  }, []);
+
+  // 3️⃣ username availability
   const checkUsername = async () => {
     if (!username.trim()) return;
     try {
@@ -41,6 +74,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
     }
   };
 
+  // 4️⃣ submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -51,7 +85,8 @@ export default function Auth({ isOpen, setSidebarOpen }) {
         loginUser({ access: data.access, refresh: data.refresh, user: data.user });
         setSidebarOpen(true);
         navigate('/');
-      } else if (formType === 'register') {
+      }
+      else if (formType === 'register') {
         if (step === 0) {
           if (!usernameAvailable) {
             setError('Please choose an available username.');
@@ -61,25 +96,35 @@ export default function Auth({ isOpen, setSidebarOpen }) {
           return;
         }
 
-        await register({
+        // build payload
+        const payload = {
           username,
-          password,
           email,
+          password,
           city,
           dob,
           phone_number: phoneNumber,
-        });
+          is_business: isBusiness,
+        };
+        if (isBusiness) {
+          payload.business_name = businessName;
+          payload.business_type = businessType;
+        }
+
+        await register(payload);
 
         setFormType('login');
         setStep(0);
         showNotification('Account created! Log in to continue.');
         navigate('/profile/edit');
-      } else if (formType === 'forgot') {
+      }
+      else if (formType === 'forgot') {
+        // your reset flow
         alert('Password reset link sent to your email.');
         setFormType('login');
       }
     } catch {
-      setError('Login Invalid. Please try again.');
+      setError('Authentication failed. Please try again.');
       setPassword('');
     }
   };
@@ -92,7 +137,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
           className={`h-2.5 rounded-full transition-all duration-300 ${
             step === 0 ? 'bg-orange-400 w-1/2' : 'bg-orange-500 w-full'
           }`}
-        ></div>
+        />
       </div>
     );
   };
@@ -123,6 +168,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
           {renderStepProgress()}
           {error && <p className="text-red-600 text-sm text-center">{error}</p>}
 
+          {/* ───── LOGIN ───── */}
           {formType === 'login' && (
             <>
               <input
@@ -130,7 +176,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Username or Email"
                 className="input-style"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={e => setUsername(e.target.value)}
                 required
               />
               <input
@@ -138,12 +184,13 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Password"
                 className="input-style"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 required
               />
             </>
           )}
 
+          {/* ───── REGISTER STEP 0 ───── */}
           {formType === 'register' && step === 0 && (
             <>
               <input
@@ -151,7 +198,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Username"
                 className="input-style"
                 value={username}
-                onChange={(e) => {
+                onChange={e => {
                   setUsername(e.target.value);
                   setUsernameAvailable(null);
                 }}
@@ -159,16 +206,21 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 required
               />
               {username && usernameAvailable !== null && (
-                <p className={`text-sm ${usernameAvailable ? 'text-green-600' : 'text-red-600'}`}>
-                  {usernameAvailable ? '✅ Username is available' : '❌ Username is taken'}
+                <p className={`text-sm ${
+                  usernameAvailable ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {usernameAvailable
+                    ? '✅ Username is available'
+                    : '❌ Username is taken'}
                 </p>
               )}
+
               <input
                 type="email"
                 placeholder="Email"
                 className="input-style"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 required
               />
               <input
@@ -176,9 +228,24 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Password"
                 className="input-style"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 required
               />
+
+              {/* business toggle */}
+              <div className="flex items-center">
+                <input
+                  id="isBusiness"
+                  type="checkbox"
+                  checked={isBusiness}
+                  onChange={() => setIsBusiness(b => !b)}
+                  className="mr-2"
+                />
+                <label htmlFor="isBusiness" className="text-sm">
+                  Register as Business
+                </label>
+              </div>
+
               <p className="text-xs text-gray-500 text-center mt-1">
                 By signing up, you agree to our{' '}
                 <a href="/terms" className="text-blue-600 hover:underline">Terms</a> and{' '}
@@ -187,22 +254,31 @@ export default function Auth({ isOpen, setSidebarOpen }) {
             </>
           )}
 
+          {/* ───── REGISTER STEP 1 ───── */}
           {formType === 'register' && step === 1 && (
             <>
-              <input
-                type="text"
-                placeholder="City (optional)"
-                className="input-style"
+              <select
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
+                onChange={e => setCity(e.target.value)}
+                className="input-style"
+                required
+              >
+                <option value="">Select your city</option>
+                {cities.map(c => (
+                  <option key={c} value={c}>
+                    {c.charAt(0).toUpperCase() + c.slice(1)}
+                  </option>
+                ))}
+              </select>
+
               <input
                 type="date"
                 className="input-style"
                 value={dob}
-                onChange={(e) => setDob(e.target.value)}
+                onChange={e => setDob(e.target.value)}
                 required
               />
+
               <PhoneInput
                 defaultCountry="CA"
                 value={phoneNumber}
@@ -210,23 +286,49 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="+1 204 555 6789"
                 className="input-style"
               />
-              <p className="text-sm text-gray-500 text-center">
-                Format: +1 204 555 6789
-              </p>
+
+              {/* business fields */}
+              {isBusiness && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Business Name"
+                    className="input-style"
+                    value={businessName}
+                    onChange={e => setBusinessName(e.target.value)}
+                    required
+                  />
+                  <select
+                    value={businessType}
+                    onChange={e => setBusinessType(e.target.value)}
+                    className="input-style"
+                    required
+                  >
+                    <option value="">Select Business Type</option>
+                    {businessTypes.map(bt => (
+                      <option key={bt} value={bt}>
+                        {bt.charAt(0).toUpperCase() + bt.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </>
           )}
 
+          {/* ───── FORGOT ───── */}
           {formType === 'forgot' && (
             <input
               type="email"
               placeholder="Email"
               className="input-style"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               required
             />
           )}
 
+          {/* ───── BUTTONS ───── */}
           <div className="flex gap-2">
             {formType === 'register' && step > 0 && (
               <button
@@ -251,29 +353,41 @@ export default function Auth({ isOpen, setSidebarOpen }) {
             </button>
           </div>
 
+          {/* ───── LINKS ───── */}
           <div className="text-xs text-center text-gray-500 space-x-2 mt-4">
             {formType !== 'login' && (
-              <span className="text-blue-600 cursor-pointer" onClick={() => { setFormType('login'); setStep(0); }}>
+              <span
+                className="text-blue-600 cursor-pointer"
+                onClick={() => { setFormType('login'); setStep(0); }}
+              >
                 Back to Login
               </span>
             )}
             {formType !== 'register' && (
-              <span className="text-blue-600 cursor-pointer" onClick={() => { setFormType('register'); setStep(0); }}>
+              <span
+                className="text-blue-600 cursor-pointer"
+                onClick={() => { setFormType('register'); setStep(0); }}
+              >
                 Sign Up
               </span>
             )}
             {formType !== 'forgot' && (
-              <span className="text-blue-600 cursor-pointer" onClick={() => setFormType('forgot')}>
+              <span
+                className="text-blue-600 cursor-pointer"
+                onClick={() => setFormType('forgot')}
+              >
                 Forgot?
               </span>
             )}
           </div>
 
+          {/* ───── SOCIAL ICONS ───── */}
           <div className="flex justify-center items-center gap-4 mt-2">
             <FaGoogle size={20} className="text-gray-700 cursor-pointer hover:text-orange-500" />
             <FaFacebook size={20} className="text-gray-700 cursor-pointer hover:text-blue-600" />
           </div>
 
+          {/* ───── GUEST BUTTON ───── */}
           <button
             type="button"
             onClick={() => navigate('/')}

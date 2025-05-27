@@ -10,6 +10,31 @@ export const login = async (credentials) => {
   return authUser;
 };
 
+// 🌆 Fetch all supported city codes
+export const fetchCities = async () => {
+  const res = await api.get('user/cities/');
+  return res.data;
+};
+
+export const toggleFollow = userId =>
+  api.post(`users/${userId}/follow/`).then(r => r.data)
+
+// ⭐ Business Reviews (for business profiles)
+export const fetchBusinessReviews = async (businessId) => {
+  const res = await api.get(`reviews/?business=${businessId}`);
+  return res.data;
+};
+
+export function fetchBusinessTypes() {
+  return api.get('user/business-types/').then(res => res.data);
+}
+
+// 📊 Business Analytics (your /analytics/ endpoint)
+export const fetchBusinessAnalytics = async () => {
+  const res = await api.get('analytics/');
+  return res.data;
+};
+
 export const register = async (payload) => {
   const response = await api.post('register/', payload);
   return response.data;

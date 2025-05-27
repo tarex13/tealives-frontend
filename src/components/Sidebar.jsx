@@ -71,8 +71,8 @@ function Sidebar({ isOpen, toggleSidebar }) {
           )}
 
           {isBusiness && (
-            <NavLink to="/business/dashboard" className="block mt-4 px-3 py-2 rounded-lg bg-green-100 dark:bg-green-800 text-green-700 dark:text-white font-semibold hover:bg-green-200 dark:hover:bg-green-700 transition">
-              Business Dashboard
+            <NavLink to="/business/analytics" className="block mt-4 px-3 py-2 rounded-lg bg-green-100 dark:bg-green-800 text-green-700 dark:text-white font-semibold hover:bg-green-200 dark:hover:bg-green-700 transition">
+              Business Analytics
             </NavLink>
           )}
         </nav>

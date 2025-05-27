@@ -1,94 +1,124 @@
-import React, { useEffect, useState } from 'react'
-import { fetchNotifications, markNotificationRead } from '../requests'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+// src/components/NotificationDropdown.jsx
+import React, { useEffect, useState, useRef } from 'react';
+import { fetchNotifications, markNotificationRead } from '../requests';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
-function NotificationDropdown() {
-  const [notifs, setNotifs] = useState([])
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState(null)
-  const { user } = useAuth()
-  const navigate = useNavigate()
+export default function NotificationDropdown() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!user?.access) {
-      console.warn('[DEBUG] Skipping fetch: no access token yet')
-      return
-    }
+  const [notifs, setNotifs] = useState([]);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
 
-    const load = async () => {
-      try {
-        const data = await fetchNotifications()
-
-        let allNotifs = []
-
-        if (Array.isArray(data)) {
-          allNotifs = data
-        } else if (Array.isArray(data?.results)) {
-          allNotifs = data.results
-        }
-
-        const unread = allNotifs.filter((n) => !n.is_read)
-        setNotifs(unread)
-      } catch (err) {
-        console.error('Error loading notifications:', err)
-        setError('Failed to load notifications.')
-        setNotifs([])
-      }
-    }
-
-    load()
-  }, [user?.access])
-
-  const handleClick = async (notif) => {
+  // Fetch from API
+  const load = async () => {
+    if (!user?.access) return;
     try {
-      await markNotificationRead(notif.id)
-      setNotifs((prev) => prev.filter((n) => n.id !== notif.id))
-      if (notif.link) {
-        navigate(notif.link)
-      }
-    } catch (err) {
-      console.error('Error marking notification as read:', err)
-      setError('Failed to mark notification as read.')
+      const data = await fetchNotifications();
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data.results)
+        ? data.results
+        : [];
+      setNotifs(list);
+      setError('');
+    } catch {
+      setError('Failed to load notifications.');
+      setNotifs([]);
     }
-  }
+  };
+
+  // initial + polling every 30s
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 30000);
+    return () => clearInterval(iv);
+  }, [user?.access]);
+
+  // reload when opened
+  useEffect(() => {
+    if (open) load();
+  }, [open]);
+
+  // click-outside to close
+  useEffect(() => {
+    const onClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const handleClick = async (n) => {
+    try {
+      await markNotificationRead(n.id);
+      setNotifs((prev) => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x));
+      if (n.link) navigate(n.link);
+    } catch {
+      setError('Couldn’t mark read.');
+    }
+  };
+
+  const unreadCount = notifs.filter((n) => !n.is_read).length;
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="relative">
+    <div className="relative" ref={wrapperRef}>
+      {/* Bell + badge */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="relative p-2 focus:outline-none"
+        aria-label="Notifications"
+      >
         🔔
-        {notifs.length > 0 && (
-          <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs px-1 rounded-full">
-            {notifs.length}
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs px-1 rounded-full">
+            {unreadCount}
           </span>
         )}
       </button>
 
+      {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white shadow rounded p-2 z-50">
-          {error && (
-            <p className="text-sm text-red-500 mb-2">
-              {error}
-            </p>
-          )}
+        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto bg-white dark:bg-gray-800 shadow-lg rounded p-2 z-50">
+          {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
 
-          {notifs.length === 0 && !error ? (
-            <p className="text-sm text-gray-500">No new notifications</p>
+          {notifs.length === 0 ? (
+            <p className="text-sm text-gray-500">No notifications</p>
           ) : (
-            notifs.map((n) => (
-              <div
-                key={n.id}
-                className="text-sm py-2 px-2 hover:bg-gray-100 cursor-pointer rounded"
-                onClick={() => handleClick(n)}
+            <>
+              <button
+                className="text-xs text-blue-600 mb-2 underline"
+                onClick={() => setNotifs((prev) => prev.map(n => ({ ...n, is_read: true })))}
               >
-                {n.content}
-              </div>
-            ))
+                Mark all read
+              </button>
+              <ul>
+                {notifs.map((n) => (
+                  <li
+                    key={n.id}
+                    onClick={() => handleClick(n)}
+                    className={`cursor-pointer px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      n.is_read ? 'opacity-70' : 'font-medium'
+                    }`}
+                  >
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
+                      {n.content}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {new Date(n.created_at).toLocaleString()}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }
-
-export default NotificationDropdown

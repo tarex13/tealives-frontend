@@ -7,6 +7,7 @@ import CitySelectorModal from '../components/CitySelectorModal';
 import { useAuth } from '../context/AuthContext';
 import { CITIES } from '../../constants';
 import { useCity } from '../context/CityContext';
+import api from '../api'
 
 function CityFilter() {
   const { city, setCity } = useCity();
@@ -77,11 +78,18 @@ function Home() {
   const [sort, setSort] = useState('newest');
   const [loadingMore, setLoadingMore] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-
   const { user } = useAuth();
   const { city } = useCity();
   const observer = useRef();
 
+  useEffect(() => {
+    if (!user || posts.length === 0) return;
+    const ids = posts.map(p => p.id);
+    api.post('posts/mark-viewed-bulk/', { posts: ids })
+       .catch(() => {
+         // optionally silently ignore
+       });
+  }, [user, posts]);
   const loadPosts = async (url = null) => {
     try {
       setLoadingMore(true);

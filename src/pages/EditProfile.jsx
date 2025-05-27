@@ -1,113 +1,172 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import ProfileImageUploader from '../components/ProfileImageUploader';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
-import { CITIES } from '../../constants';
+import { CITIES, BUSINESS_TYPES } from '../../constants';
 
 const USERNAME_CHANGE_LIMIT_DAYS = 30;
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 export default function EditProfile() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
+  const { showNotification } = useNotification();
+
   const [form, setForm] = useState({
     username: '',
+    email: '',
     city: '',
     bio: '',
     dob: '',
     gender: '',
     phone_number: '',
+    display_name: '',
+    website: '',
+    instagram: '',
+    twitter: '',
+    facebook: '',
     profile_image: null,
-    preview: null,
+    logo: null,
+    is_business: false,
+    business_type: '',
+    business_name: '',
+    business_description: '',
+    business_locations: '',
+    business_hours: {},
   });
-
-  const [initialImageUrl, setInitialImageUrl] = useState(null);
+  const [initialAvatarUrl, setInitialAvatarUrl] = useState(null);
+  const [initialLogoUrl, setInitialLogoUrl] = useState(null);
   const [canChangeUsername, setCanChangeUsername] = useState(true);
   const [daysUntilChange, setDaysUntilChange] = useState(0);
-  const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
 
+  // 1️⃣ Load profile
   useEffect(() => {
-    const loadProfile = async () => {
+    (async () => {
       try {
         const res = await api.get('user/profile/');
-        const data = res.data;
-        setForm((prev) => ({
-          ...prev,
-          ...data,
-          preview: data.profile_image_url || null,
-        }));
+        const d = res.data;
+        setForm({
+          username: d.username,
+          email: d.email,
+          city: d.city || '',
+          bio: d.bio || '',
+          dob: d.dob || '',
+          gender: d.gender || '',
+          phone_number: d.phone_number || '',
+          display_name: d.display_name || '',
+          website: d.website || '',
+          instagram: d.instagram || '',
+          twitter: d.twitter || '',
+          facebook: d.facebook || '',
+          profile_image: null,
+          logo: null,
+          is_business: d.is_business,
+          business_type: d.business_type || '',
+          business_name: d.business_name || '',
+          business_description: d.business_description || '',
+          business_locations: (d.business_locations || []).join('\n'),
+          business_hours: d.business_hours || {},
+        });
+        setInitialAvatarUrl(d.profile_image_url || null);
+        setInitialLogoUrl(d.logo_url || null);
 
-        setInitialImageUrl(data.profile_image_url || null);
-
-        if (data.last_username_change) {
-          const lastChange = new Date(data.last_username_change);
-          const now = new Date();
-          const daysSince = Math.floor((now - lastChange) / (1000 * 60 * 60 * 24));
-          if (daysSince < USERNAME_CHANGE_LIMIT_DAYS) {
+        // username cooldown
+        if (d.last_username_change) {
+          const last = new Date(d.last_username_change);
+          const days = Math.floor(
+            (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (days < USERNAME_CHANGE_LIMIT_DAYS) {
             setCanChangeUsername(false);
-            setDaysUntilChange(USERNAME_CHANGE_LIMIT_DAYS - daysSince);
+            setDaysUntilChange(USERNAME_CHANGE_LIMIT_DAYS - days);
           }
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load profile.');
       }
-    };
-    loadProfile();
+    })();
   }, []);
 
+  // Handlers
   const handleImageCropped = (blob, previewUrl) => {
-    setForm((prev) => ({
-      ...prev,
-      profile_image: blob,
-      preview: previewUrl,
+    setForm(f => ({ ...f, profile_image: blob }));
+    setInitialAvatarUrl(previewUrl);
+  };
+  const handleLogoChange = e => {
+    const file = e.target.files[0];
+    if (file) {
+      setForm(f => ({ ...f, logo: file }));
+      setInitialLogoUrl(URL.createObjectURL(file));
+    }
+  };
+  const handleHourChange = (day, val) => {
+    setForm(f => ({
+      ...f,
+      business_hours: { ...f.business_hours, [day]: val }
     }));
   };
 
-  const handlePhoneChange = (value) => {
-    setForm((prev) => ({ ...prev, phone_number: value }));
-  };
-
+  // Validation
   const validate = () => {
-    const errors = {};
-    if (!form.city || form.city.trim().length < 2) {
-      errors.city = 'City must be at least 2 characters.';
+    const errs = {};
+    if (!form.email.trim()) errs.email = 'Email is required.';
+    if (!form.city.trim()) errs.city = 'City is required.';
+    if (form.bio.length > 300) errs.bio = 'Bio must be under 300 chars.';
+    if (form.is_business && !form.business_name.trim()) {
+      errs.business_name = 'Business name is required.';
     }
-    if (form.bio && form.bio.length > 300) {
-      errors.bio = 'Bio must be under 300 characters.';
-    }
-    if (!form.username?.trim()) {
-      errors.username = 'Username is required.';
-    }
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+    setValidationErrors(errs);
+    return !Object.keys(errs).length;
   };
 
+  // Submit
   const handleSubmit = async () => {
     if (!validate()) return;
+    setSubmitting(true);
+    setError('');
     try {
-      setSubmitting(true);
-      const formData = new FormData();
-      formData.append('city', form.city.trim());
-      formData.append('bio', form.bio.trim());
-      formData.append('dob', form.dob || '');
-      formData.append('gender', form.gender || '');
-      formData.append('phone_number', form.phone_number || '');
-      if (canChangeUsername) formData.append('username', form.username);
-      if (form.profile_image) {
-        formData.append('profile_image', form.profile_image, 'avatar.jpg');
+      const fd = new FormData();
+      Object.entries({
+        email: form.email,
+        city: form.city,
+        bio: form.bio,
+        dob: form.dob,
+        gender: form.gender,
+        display_name: form.display_name,
+        website: form.website,
+        instagram: form.instagram,
+        twitter: form.twitter,
+        facebook: form.facebook,
+        phone_number: form.phone_number,
+      }).forEach(([k, v]) => fd.append(k, v || ''));
+
+      if (form.profile_image) fd.append('profile_image', form.profile_image);
+      if (canChangeUsername) fd.append('username', form.username);
+
+      if (form.is_business) {
+        fd.append('is_business', 'true');
+        fd.append('business_type', form.business_type);
+        fd.append('business_name', form.business_name);
+        fd.append('business_description', form.business_description);
+        fd.append(
+          'business_locations',
+          JSON.stringify(form.business_locations.split('\n').filter(Boolean))
+        );
+        fd.append('business_hours', JSON.stringify(form.business_hours));
+        if (form.logo) fd.append('logo', form.logo);
       }
 
-      await api.put('user/profile/', formData, {
+      const res = await api.put('user/profile/', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-
-      setSuccess(true);
-      setError(null);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
+      setUser(res.data);
+      showNotification('Profile updated!', 'success');
+    } catch {
       setError('Failed to save profile.');
     } finally {
       setSubmitting(false);
@@ -115,103 +174,162 @@ export default function EditProfile() {
   };
 
   const handleDeactivate = async () => {
-    if (confirm('Are you sure you want to deactivate your account?')) {
-      await api.delete('user/account/');
-      alert('Account deactivated.');
-      window.location.href = '/login';
+    if (window.confirm('Are you sure you want to deactivate your account?')) {
+      try {
+        await api.delete('user/account/');
+        window.location.href = '/login';
+      } catch {
+        showNotification('Failed to deactivate account.', 'error');
+      }
     }
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6 mt-10 bg-white dark:bg-gray-800 shadow rounded">
-      <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Edit Your Profile</h2>
+    <div className="max-w-3xl mx-auto p-6 mt-10 bg-white dark:bg-gray-800 shadow rounded">
+      <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">
+        Edit Your Profile
+      </h2>
 
-      {success && (
-        <div className="mb-4 p-3 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100 text-sm rounded">
-          ✅ Profile updated successfully!
-        </div>
-      )}
       {error && (
-        <div className="mb-4 p-3 bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100 text-sm rounded">
+        <div className="mb-4 p-3 bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100 rounded">
           ⚠️ {error}
         </div>
       )}
 
-      <ProfileImageUploader previewUrl={initialImageUrl} onImageCropped={handleImageCropped} />
+      {/* Avatar */}
+      <ProfileImageUploader
+        previewUrl={initialAvatarUrl}
+        onImageCropped={handleImageCropped}
+      />
 
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username <span className="text-red-500">*</span></label>
-          <input
-            name="username"
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-            disabled={!canChangeUsername}
-            className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            placeholder="Choose a unique username"
-          />
-          {!canChangeUsername && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              You can change your username in {daysUntilChange} day{daysUntilChange !== 1 ? 's' : ''}.
-            </p>
+      {/* Business Toggle */}
+      <div className="mt-4 flex items-center">
+        <input
+          id="isBusiness"
+          type="checkbox"
+          checked={form.is_business}
+          onChange={() => setForm(f => ({ ...f, is_business: !f.is_business }))}
+          className="mr-2"
+        />
+        <label htmlFor="isBusiness" className="text-sm">
+          Enable Business Profile
+        </label>
+      </div>
+
+      {/* Business Logo */}
+      {form.is_business && (
+        <div className="mt-4 text-center">
+          <label className="block text-sm font-medium mb-1">
+            Business Logo
+          </label>
+          <input type="file" accept="image/*" onChange={handleLogoChange} />
+          {initialLogoUrl && (
+            <img
+              src={initialLogoUrl}
+              alt="Logo Preview"
+              className="mt-2 mx-auto w-24 h-24 object-cover rounded"
+            />
           )}
-          {validationErrors.username && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.username}</p>
+        </div>
+      )}
+
+      <form onSubmit={e => e.preventDefault()} className="space-y-4 mt-6">
+        {/* Email */}
+        <div>
+          <label className="block text-sm font-medium">Email *</label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            className="input-style"
+            required
+          />
+          {validationErrors.email && (
+            <p className="text-red-600">{validationErrors.email}</p>
           )}
         </div>
 
+        {/* Username */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">City <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium">Username *</label>
+          <input
+            value={form.username}
+            onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+            disabled={!canChangeUsername}
+            className="input-style"
+            required
+          />
+          {!canChangeUsername && (
+            <p className="text-xs text-gray-500">
+              You can change again in {daysUntilChange} day
+              {daysUntilChange !== 1 ? 's' : ''}.
+            </p>
+          )}
+        </div>
+
+        {/* Display Name */}
+        <div>
+          <label className="block text-sm font-medium">Display Name</label>
+          <input
+            value={form.display_name}
+            onChange={e =>
+              setForm(f => ({ ...f, display_name: e.target.value }))
+            }
+            className="input-style"
+          />
+        </div>
+
+        {/* City */}
+        <div>
+          <label className="block text-sm font-medium">City *</label>
           <select
-            name="city"
             value={form.city}
-            onChange={(e) => setForm({ ...form, city: e.target.value })}
-            className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+            className="input-style"
+            required
           >
             <option value="">Select City</option>
-            {CITIES.map((c) => (
+            {CITIES.map(c => (
               <option key={c} value={c}>
-                {c.charAt(0).toUpperCase() + c.slice(1)}
+                {c}
               </option>
             ))}
           </select>
           {validationErrors.city && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.city}</p>
+            <p className="text-red-600">{validationErrors.city}</p>
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-          <PhoneInput
-            defaultCountry="CA"
-            value={form.phone_number}
-            onChange={handlePhoneChange}
-            className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            placeholder="+1 204 555 6789"
-          />
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Enter number including area code. Format: +1 204 555 6789
-          </p>
+        {/* Phone & DOB */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm">Phone Number</label>
+            <PhoneInput
+              defaultCountry="CA"
+              value={form.phone_number}
+              onChange={val => setForm(f => ({ ...f, phone_number: val }))}
+              className="input-style"
+              placeholder="+1 204 555 6789"
+            />
+          </div>
+          <div>
+            <label className="block text-sm">Date of Birth</label>
+            <input
+              type="date"
+              value={form.dob}
+              onChange={e => setForm(f => ({ ...f, dob: e.target.value }))}
+              className="input-style"
+            />
+          </div>
         </div>
 
+        {/* Gender */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date of Birth</label>
-          <input
-            type="date"
-            name="dob"
-            value={form.dob || ''}
-            onChange={(e) => setForm({ ...form, dob: e.target.value })}
-            className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
+          <label className="block text-sm">Gender</label>
           <select
-            name="gender"
-            value={form.gender || ''}
-            onChange={(e) => setForm({ ...form, gender: e.target.value })}
-            className="w-full px-4 py-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            value={form.gender}
+            onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}
+            className="input-style"
           >
             <option value="">Select</option>
             <option value="male">Male</option>
@@ -220,20 +338,111 @@ export default function EditProfile() {
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bio</label>
-          <textarea
-            name="bio"
-            value={form.bio}
-            onChange={(e) => setForm({ ...form, bio: e.target.value })}
-            className="w-full px-4 py-2 border rounded h-28 resize-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            placeholder="Tell us a bit about yourself..."
+        {/* Socials */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <input
+            type="url"
+            placeholder="Website"
+            value={form.website}
+            onChange={e => setForm(f => ({ ...f, website: e.target.value }))}
+            className="input-style"
           />
-          {validationErrors.bio && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.bio}</p>
-          )}
+          <input
+            type="url"
+            placeholder="Instagram"
+            value={form.instagram}
+            onChange={e =>
+              setForm(f => ({ ...f, instagram: e.target.value }))
+            }
+            className="input-style"
+          />
+          <input
+            type="url"
+            placeholder="Twitter"
+            value={form.twitter}
+            onChange={e => setForm(f => ({ ...f, twitter: e.target.value }))}
+            className="input-style"
+          />
+          <input
+            type="url"
+            placeholder="Facebook"
+            value={form.facebook}
+            onChange={e => setForm(f => ({ ...f, facebook: e.target.value }))}
+            className="input-style"
+          />
         </div>
 
+        {/* Business-only */}
+        {form.is_business && (
+          <>
+            <hr className="my-6 border-gray-300 dark:border-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+              Business Info
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <select
+                value={form.business_type}
+                onChange={e =>
+                  setForm(f => ({ ...f, business_type: e.target.value }))
+                }
+                className="input-style"
+              >
+                <option value="">Select Business Type</option>
+                {BUSINESS_TYPES.map(bt => (
+                  <option key={bt} value={bt}>
+                    {bt}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                placeholder="Business Name"
+                value={form.business_name}
+                onChange={e =>
+                  setForm(f => ({ ...f, business_name: e.target.value }))
+                }
+                className="input-style"
+              />
+            </div>
+
+            <textarea
+              placeholder="Business Description"
+              value={form.business_description}
+              onChange={e =>
+                setForm(f => ({ ...f, business_description: e.target.value }))
+              }
+              className="input-style h-24"
+            />
+
+            <textarea
+              placeholder="Locations (one per line)"
+              value={form.business_locations}
+              onChange={e =>
+                setForm(f => ({ ...f, business_locations: e.target.value }))
+              }
+              className="input-style h-28"
+            />
+
+            <div className="space-y-2 mt-4">
+              {DAYS.map(day => (
+                <div key={day}>
+                  <label className="block text-sm">{day}</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 9:00 AM - 5:00 PM or Closed"
+                    value={form.business_hours[day] || ''}
+                    onChange={e => handleHourChange(day, e.target.value)}
+                    className="input-style"
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Save & Deactivate */}
         <button
           type="button"
           onClick={handleSubmit}
