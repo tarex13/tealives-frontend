@@ -1,111 +1,241 @@
+// src/components/PostActionMenu.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { handlePin, deletePost } from '../requests';
+import ReportModal from './ReportModal';
+import { useNotification } from '../context/NotificationContext';
 
-const PostActionMenu = ({ postId, postOwnerId, currentUserId, postOwnerUsername, isAnonymous }) => {
-    const [open, setOpen] = useState(false);
-    const menuRef = useRef();
-    const { user } = useAuth();
+export default function PostActionMenu({
+  postId,
+  postOwnerId,
+  postOwnerUsername,
+  currentUserId,
+  isAnonymous,
+  isPinActive,
+  pinnedByAdmin,
+  onEditClick,   // callback(postId) ⇒ void, provided by parent
+  onDeleted,     // callback() ⇒ void, provided by parent
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef();
+  const [reportOpen, setReportOpen] = useState(false);
+  const { user } = useAuth();
+  const isLoggedIn = Boolean(user);
+  const isOwner = postOwnerId && currentUserId && postOwnerId === currentUserId;
+  const canModerate = user?.is_admin || user?.is_moderator;
+  const { showNotification } = useNotification();
 
-    const isOwner = currentUserId === postOwnerId;
-    const isAdmin = user?.role === 'admin';
-    const isModerator = user?.role === 'moderator';
+  // Pin states
+  const [personalPinned, setPersonalPinned] = useState(
+    Boolean(isPinActive && !pinnedByAdmin)
+  );
+  const [globalPinned, setGlobalPinned] = useState(Boolean(pinnedByAdmin));
+  const active = personalPinned || globalPinned;
 
+  useEffect(() => {
+    setPersonalPinned(Boolean(isPinActive && !pinnedByAdmin));
+    setGlobalPinned(Boolean(pinnedByAdmin));
+  }, [isPinActive, pinnedByAdmin]);
+
+  // Close menu if click outside
+  useEffect(() => {
     const handleClickOutside = (e) => {
-        if (menuRef.current && !menuRef.current.contains(e.target)) {
-            setOpen(false);
-        }
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
     };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    useEffect(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+  // Toggle personal pin
+  const togglePersonal = async (unpin) => {
+    setPersonalPinned(!unpin);
+    setOpen(false);
+    try {
+      await handlePin(postId, 'personal', unpin);
+    } catch {
+      setPersonalPinned(unpin);
+    }
+  };
 
-    const handleNavigation = (url) => {
-        window.location.href = url;
-    };
+  // Toggle global pin (moderator only)
+  const toggleGlobal = async (unpin) => {
+    setGlobalPinned(!unpin);
+    setOpen(false);
+    try {
+      await handlePin(postId, 'global', unpin);
+    } catch {
+      setGlobalPinned(unpin);
+    }
+  };
 
-    return (
-        <div className="relative" ref={menuRef}>
-            <button 
-                onClick={() => setOpen(!open)} 
-                className="flex items-center p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
-            >
-                <MoreHorizontal className="w-5 h-5" />
-            </button>
+  // Delete post
+  const handleDelete = async () => {
+    setOpen(false);
+    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    try {
+      await deletePost(postId);
+      if (onDeleted) {
+        onDeleted();
+      } else {
+        window.location.reload();
+      }
+      showNotification('Post deleted.', 'success');
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      showNotification('Failed to delete post.', 'error');
+    }
+  };
 
-            {open && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-md shadow-lg z-50">
-                    <div className="p-1 text-left text-sm">
-                        {/* Edit/Delete for Owner, Admin, Mod */}
-                        {(isOwner || isAdmin || isModerator) && (
-                            <>
-                                <button 
-                                    onClick={() => console.log('Edit Post')} 
-                                    className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    Edit Post
-                                </button>
-                                <button 
-                                    onClick={() => console.log('Delete Post')} 
-                                    className="w-full px-4 py-2 text-red-500 hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    Delete Post
-                                </button>
-                            </>
-                        )}
+  // Navigate helper (fallback if onEditClick not provided)
+  const handleNavigation = (url) => {
+    window.location.href = url;
+  };
 
-                        {/* Pin for Admin/Mod */}
-                        {(isAdmin || isModerator) && (
-                            <button 
-                                onClick={() => console.log('Pin Post')} 
-                                className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            >
-                                Pin Post
-                            </button>
-                        )}
+  const menuItemClass =
+    'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600';
 
-                        {/* Chat and View Profile only if Post is NOT Anonymous and User is NOT Owner */}
-                        {!isAnonymous && postOwnerId !== currentUserId && (
-                            <>
-                                <button 
-                                    onClick={() => handleNavigation(`/chat/${postOwnerId}`)} 
-                                    className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    Chat with {postOwnerUsername}
-                                </button>
-                                <button 
-                                    onClick={() => handleNavigation(`/profile/${postOwnerId}`)} 
-                                    className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    View Profile
-                                </button>
-                            </>
-                        )}
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+        aria-label="Post options"
+      >
+        ⋯
+      </button>
 
-                        {/* Report only if Not Owner */}
-                        {!isOwner && (
-                            <button 
-                                onClick={() => console.log('Report Post')} 
-                                className="w-full px-4 py-2 text-red-500 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            >
-                                Report Post
-                            </button>
-                        )}
-
-                        {/* Hide Always Shown */}
-                        <button 
-                            onClick={() => console.log('Hide Post')} 
-                            className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                        >
-                            Hide Post
-                        </button>
-                    </div>
-                </div>
+      {open && (
+        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50">
+          <div className="p-1 text-sm text-gray-900 dark:text-gray-100">
+            {isLoggedIn && (
+              <>
+                {!active ? (
+                  <>
+                    <button
+                      onClick={() => togglePersonal(false)}
+                      className={menuItemClass}
+                    >
+                      📌 Pin to My Feed
+                    </button>
+                    {canModerate && !globalPinned && (
+                      <button
+                        onClick={() => toggleGlobal(false)}
+                        className={menuItemClass}
+                      >
+                        🌍 Pin for Everyone
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {personalPinned && (
+                      <button
+                        onClick={() => togglePersonal(true)}
+                        className={menuItemClass}
+                      >
+                        🔓 Unpin from My Feed
+                      </button>
+                    )}
+                    {canModerate && globalPinned && (
+                      <button
+                        onClick={() => toggleGlobal(true)}
+                        className={menuItemClass}
+                      >
+                        🚫 Unpin for Everyone
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
             )}
-        </div>
-    );
-};
 
-export default PostActionMenu;
+            {isLoggedIn && !isAnonymous && !isOwner && (
+              <button
+                onClick={() =>
+                  handleNavigation(`/chat/${postOwnerId}`)
+                }
+                className={menuItemClass}
+              >
+                💬 Chat with {postOwnerUsername}
+              </button>
+            )}
+
+            {!isAnonymous && (
+              <button
+                onClick={() =>
+                  handleNavigation(`/profile/${postOwnerUsername}`)
+                }
+                className={menuItemClass}
+              >
+                🙍 View Profile
+              </button>
+            )}
+
+            {isOwner && (
+              <>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    if (onEditClick) {
+                      onEditClick(postId);
+                    } else {
+                      handleNavigation(`/posts/${postId}/edit`);
+                    }
+                  }}
+                  className={menuItemClass}
+                >
+                  ✏️ Edit Post
+                </button>
+
+                <button
+                  onClick={handleDelete}
+                  className={`${menuItemClass} text-red-500`}
+                >
+                  🗑️ Delete Post
+                </button>
+              </>
+            )}
+
+            {isLoggedIn && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setReportOpen(true);
+                }}
+                className={`${menuItemClass} text-red-500`}
+              >
+                🚩 Report Post
+              </button>
+            )}
+
+            <button
+              onClick={() => console.log('Hide Post')}
+              className={menuItemClass}
+            >
+              🙈 Hide Post
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ReportModal
+        isOpen={reportOpen}
+        contentType="post"
+        contentId={postId}
+        onClose={() => setReportOpen(false)}
+        onSuccess={() => {
+          setReportOpen(false);
+          showNotification(
+            'Thanks for reporting. Our team will review shortly.',
+            'success'
+          );
+        }}
+      />
+    </div>
+  );
+}

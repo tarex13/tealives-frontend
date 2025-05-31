@@ -9,7 +9,7 @@ function GroupChatThread({ groupId, groupName, currentUserId }) {
   const ws = useRef(null)
   const messagesEndRef = useRef(null)
 
-  const token = localStorage.getItem('userToken')
+  const token = localStorage.getItem('accessToken')
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

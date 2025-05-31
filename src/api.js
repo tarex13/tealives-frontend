@@ -1,55 +1,57 @@
+// src/api.js
 import axios from 'axios';
 import { getUpdateAccessTokenCallback } from './context/AuthContextHelper';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/',
-  withCredentials: true,  // ✅ Include cookies in all requests
+  withCredentials: true,  // send cookies (including refresh token) on every request
 });
 
-// ✅ Attach access token from localStorage
-api.interceptors.request.use((config) => {
-  const accessToken = localStorage.getItem('accessToken');
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
-    console.log('[api.js] Access token attached');
-  }
-  return config;
-}, (error) => Promise.reject(error));
+// Attach the Bearer access token automatically
+api.interceptors.request.use(
+  config => {
+    const access = localStorage.getItem('accessToken');
+    if (access) {
+      config.headers.Authorization = `Bearer ${access}`;
+      console.log('[api] Attached access token');
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
 
-// ✅ Refresh token on 401 using cookie, not manual refresh token
+// On 401/token_not_valid, do one silent refresh then retry original request
 api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+  response => response,
+  async error => {
+    const origReq = error.config;
 
     if (
       error.response?.status === 401 &&
       error.response?.data?.code === 'token_not_valid' &&
-      !originalRequest._retry
+      !origReq._retry
     ) {
-      originalRequest._retry = true;
-
+      origReq._retry = true;
       try {
-        const refreshRes = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/'}token/refresh/`,
-          {},  // No body needed, backend reads refresh_token from cookie
-          { withCredentials: true }  // ✅ Ensure cookies are sent
-        );
+        // Use our api instance so withCredentials + baseURL apply
+        const { data } = await api.post('token/refresh/', {});
+        const { access } = data;
 
-        const { access } = refreshRes.data;
+        // Persist new access token
         localStorage.setItem('accessToken', access);
 
-        const updateAccessToken = getUpdateAccessTokenCallback();
-        if (updateAccessToken) updateAccessToken(access);
+        // Let AuthContext know so it can reschedule the next silent refresh
+        const cb = getUpdateAccessTokenCallback();
+        if (cb) cb();
 
-        originalRequest.headers.Authorization = `Bearer ${access}`;
-        return api(originalRequest);
-
-      } catch (refreshError) {
-        console.error('[api.js] Refresh failed:', refreshError);
+        // Retry original request with new token
+        origReq.headers.Authorization = `Bearer ${access}`;
+        return api(origReq);
+      } catch (refreshErr) {
+        console.error('[api] Refresh failed:', refreshErr);
         localStorage.removeItem('accessToken');
         window.location.href = '/user/auth/';
-        return Promise.reject(refreshError);
+        return Promise.reject(refreshErr);
       }
     }
 

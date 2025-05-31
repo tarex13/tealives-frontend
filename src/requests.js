@@ -6,7 +6,7 @@ export const login = async (credentials) => {
   const { access, refresh, user } = response.data;
   const authUser = { access, refresh, user };
   localStorage.setItem('user', JSON.stringify(authUser));
-  localStorage.setItem('userToken', access);
+  localStorage.setItem('accessToken', access);
   return authUser;
 };
 
@@ -48,6 +48,9 @@ export const fetchThreads = async () => {
 
 export const fetchThread = (userId) => api.get(`messages/thread/${userId}/`).then(res => res.data);
 
+export const searchUsers = (query) =>
+  api.get(`/users/search/`, { params: { q: query } }).then(res => res.data);
+
 export const sendMessage = (recipientId, content) => 
   api.post('messages/', { recipient: recipientId, content });
 
@@ -56,23 +59,43 @@ export const fetchPublicProfile = (id) => api.get(`user/public/${id}/`).then(res
 export const updateProfile = (data) => api.patch('profile/', data);
 
 // 📅 Events
-export const fetchEvents = (city, url = null) => 
-  url ? api.get(url).then(res => res.data) : api.get(`events/?city=${city}`).then(res => res.data);
+export const fetchEvents = async (city, isFeed = false, url = null) => {
+  const params = new URLSearchParams({ city });
+
+  if (isFeed) {
+    params.set('type', 'feed');
+  }
+
+  const finalUrl = url || `events/?${params.toString()}`;
+  console.log("Events URL:", finalUrl);
+
+  const response = await api.get(finalUrl);
+  return response.data;
+};
 
 export const createEvent = (data) => api.post('events/', data);
 export const rsvpToEvent = (id) => api.patch(`events/${id}/rsvp/`);
 
 // 🛒 Marketplace
-export const fetchMarketplace = async (city, filters = {}) => {
-    if (typeof filters === 'string') {
-        throw new Error("Filters should be an object, not a string.");
-    }
+export const fetchMarketplace = async (city, filters = {}, isFeed = false, url = null) => {
+  if (typeof filters === 'string') {
+    throw new Error("Filters should be an object, not a string.");
+  }
 
-    const params = new URLSearchParams({ city, ...filters });
-    console.log("Final URL Params:", params.toString());
+  const params = new URLSearchParams({
+    ...filters,
+    city,
+  });
 
-    const response = await api.get(`marketplace/?${params.toString()}`);
-    return response.data;
+  if (isFeed) {
+    params.set('type', 'feed');
+  }
+
+  const finalUrl = url || `marketplace/?${params.toString()}`;
+  console.log("Marketplace URL:", finalUrl);
+
+  const response = await api.get(finalUrl);
+  return response.data;
 };
 // 🚀 Create Listing with Progress Callback
 export const createListing = async (data, onProgress) => {
@@ -151,7 +174,7 @@ export const createGroup = async (data) => {
 
 export const getGroupDetail = (groupId) => 
   api.get(`groups/${groupId}/`).then(res => res.data);
-export const getGroupPosts = (groupId) => 
+export const getGroupPosts = (groupId) =>
   api.get(`groups/${groupId}/posts/`).then(res => res.data);
 
 export const fetchGroupMessages = (groupId) => 
@@ -178,6 +201,29 @@ export const approveGroup = (groupId) =>
 
 export const rejectGroup = (groupId) => 
     api.post(`groups/${groupId}/reject/`);
+
+export const handlePin = async (postId, scope = 'personal', unpin = false) => {
+    try {
+        const payload = {
+            post_id: postId,
+            scope,
+            ...(unpin && { unpin: true })
+        };
+
+        const response = await api.post('/pin/', payload);
+        return response.data;
+    } catch (error) {
+        console.error('Pin/unpin failed:', error);
+        throw error.response?.data || { detail: 'Something went wrong during pinning.' };
+    }
+};
+
+export async function deletePost(postId) {
+  return api.delete(`/api/posts/${postId}/`);
+}
+
+export const updatePost = (postId, payload) =>
+  api.patch(`posts/${postId}/`, payload).then(res => res.data);
 
 export const fetchGroupsPendingDeletion = () => 
     api.get('groups/pending-deletion/');
@@ -234,5 +280,4 @@ export const logout = async () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('hasLoggedIn');
   localStorage.setItem('sidebarOpen', 'false');
-  localStorage.removeItem('userToken');
 };

@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
 
   const refreshAccessToken = async () => {
     try {
-      const res = await api.post('token/refresh/', {}, { withCredentials: true });
+      const res = await api.post('token/refresh/');
       const { access } = res.data;
       localStorage.setItem('accessToken', access);
 
@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
   const clearStoredAuth = () => {
-    ['accessToken', 'hasLoggedIn', 'userToken', 'user'].forEach(key =>
+    ['accessToken', 'hasLoggedIn', 'user'].forEach(key =>
       localStorage.removeItem(key)
     );
     localStorage.setItem('sidebarOpen', 'false')

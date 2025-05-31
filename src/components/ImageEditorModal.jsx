@@ -1,7 +1,8 @@
+// src/components/ImageEditorModal.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import Cropper from 'react-easy-crop';
 import Slider from '@mui/material/Slider';
-import getCroppedImg from '../utils/cropImageUtils';
+import getCroppedImg from '../utils/cropImageUtils'; // your helper
 
 function ImageEditorModal({ fileObj, onSave, onClose }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -11,33 +12,70 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
   const [flip, setFlip] = useState(false);
   const [caption, setCaption] = useState(fileObj.caption || '');
 
-  const imageUrl = useMemo(() => {
+  // 1) Build the source URL:
+  const imageSrc = useMemo(() => {
+    if (fileObj.editedFile instanceof Blob) {
+      return URL.createObjectURL(fileObj.editedFile);
+    }
     if (fileObj.file instanceof Blob) {
       return URL.createObjectURL(fileObj.file);
     }
+    if (fileObj.url) {
+      return fileObj.url;
+    }
     return null;
-  }, [fileObj.file]);
+  }, [fileObj]);
 
-  // Cleanup the created object URL to avoid memory leaks
+  // 2) Cleanup blob URLs
   useEffect(() => {
     return () => {
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      if (fileObj.editedFile instanceof Blob) {
+        URL.revokeObjectURL(imageSrc);
+      }
+      if (fileObj.file instanceof Blob && !fileObj.editedFile) {
+        URL.revokeObjectURL(imageSrc);
+      }
     };
-  }, [imageUrl]);
+  }, [fileObj, imageSrc]);
+
+  if (!imageSrc) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center text-white text-lg">
+        Unable to load image preview.
+        <button onClick={onClose} className="ml-4 underline">
+          Close
+        </button>
+      </div>
+    );
+  }
+
+  const onCropComplete = (_, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels);
+  };
 
   const handleSave = async () => {
-    if (!imageUrl || !croppedAreaPixels) return;
+    if (!imageSrc || !croppedAreaPixels) return;
 
     try {
+      // Pass rotation/flip to your helper
       const blob = await getCroppedImg(
-        imageUrl,
+        imageSrc,
         croppedAreaPixels,
-        fileObj.file.type,
+        fileObj.file?.type || 'image/png',
         rotation,
         flip
       );
-      const editedFile = new File([blob], fileObj.file.name, { type: fileObj.file.type });
-      onSave({ ...fileObj, editedFile, caption, status: 'edited' });
+      const editedFile = new File(
+        [blob],
+        fileObj.file?.name || 'cropped.png',
+        { type: fileObj.file?.type || 'image/png' }
+      );
+      onSave({
+        ...fileObj,
+        editedFile,
+        caption,
+        status: 'edited',
+      });
     } catch (err) {
       console.error('Error during image processing:', err);
     }
@@ -50,22 +88,11 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
     setFlip(false);
   };
 
-  if (!imageUrl) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center text-white text-lg">
-        Unable to load image preview.
-        <button onClick={onClose} className="ml-4 underline">
-          Close
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex flex-col items-center justify-center p-4">
       <div className="relative w-full max-w-lg h-96 bg-white rounded shadow-lg overflow-hidden">
         <Cropper
-          image={imageUrl}
+          image={imageSrc}
           crop={crop}
           zoom={zoom}
           rotation={rotation}
@@ -73,11 +100,15 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
           onCropChange={setCrop}
           onZoomChange={setZoom}
           onRotationChange={setRotation}
-          onCropComplete={(_, croppedPixels) => setCroppedAreaPixels(croppedPixels)}
+          onCropComplete={onCropComplete}
+          objectFit="horizontalCover"
+          transform={{
+            scaleX: flip ? -1 : 1,
+          }}
         />
       </div>
 
-      {/* Caption Input Section */}
+      {/* Caption Input */}
       <div className="w-full max-w-lg mt-4">
         <input
           type="text"
@@ -88,6 +119,7 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
         />
       </div>
 
+      {/* Zoom Slider */}
       <div className="w-full max-w-lg">
         <Slider
           value={zoom}
@@ -100,32 +132,32 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
 
       {/* Control Buttons */}
       <div className="flex flex-wrap gap-2 mt-4">
-        <button 
-          onClick={() => setRotation((r) => (r + 90) % 360)} 
+        <button
+          onClick={() => setRotation((r) => (r + 90) % 360)}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
         >
           Rotate
         </button>
-        <button 
-          onClick={() => setFlip((f) => !f)} 
+        <button
+          onClick={() => setFlip((f) => !f)}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
         >
           Flip
         </button>
-        <button 
-          onClick={resetEdits} 
+        <button
+          onClick={resetEdits}
           className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition"
         >
           Reset
         </button>
-        <button 
-          onClick={handleSave} 
+        <button
+          onClick={handleSave}
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
           Save
         </button>
-        <button 
-          onClick={onClose} 
+        <button
+          onClick={onClose}
           className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
         >
           Cancel

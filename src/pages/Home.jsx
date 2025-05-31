@@ -1,4 +1,6 @@
+// src/pages/Home.jsx
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { fetchPosts, fetchEvents, fetchPostById } from '../requests';
 import FeedCard from '../components/FeedCard';
 import CreatePost from '../components/CreatePost';
@@ -7,7 +9,6 @@ import CitySelectorModal from '../components/CitySelectorModal';
 import { useAuth } from '../context/AuthContext';
 import { CITIES } from '../../constants';
 import { useCity } from '../context/CityContext';
-import api from '../api'
 
 function CityFilter() {
   const { city, setCity } = useCity();
@@ -48,6 +49,7 @@ function SortFilter({ sort, setSort }) {
   );
 }
 
+// Interleave posts + events (existing logic) ──────────────────────────────────
 function mixContent(posts, events) {
   const mixed = [];
   const eventFrequency = Math.floor(posts.length / (events.length + 1)) || posts.length + 1;
@@ -59,154 +61,227 @@ function mixContent(posts, events) {
       mixed.push({ type: 'event', data: events[eventIndex++] });
     }
   });
-
   while (eventIndex < events.length) {
     mixed.push({ type: 'event', data: events[eventIndex++] });
   }
-
   return mixed;
 }
 
-// same imports ...
-
-function Home() {
-  const [posts, setPosts] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [next, setNext] = useState(null);
-  const [sort, setSort] = useState('newest');
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
+export default function Home() {
   const { user } = useAuth();
   const { city } = useCity();
-  const observer = useRef();
+  const location = useLocation();
 
-  useEffect(() => {
-    if (!user || posts.length === 0) return;
-    const ids = posts.map(p => p.id);
-    api.post('posts/mark-viewed-bulk/', { posts: ids })
-       .catch(() => {
-         // optionally silently ignore
-       });
-  }, [user, posts]);
-  const loadPosts = async (url = null) => {
-    try {
-      setLoadingMore(true);
-      const res = await fetchPosts(city, sort, url);
-      const newPosts = Array.isArray(res?.results) ? res.results : [];
-      setPosts(prev => {
-        const ids = new Set(prev.map(p => p.id));
-        const unique = newPosts.filter(p => !ids.has(p.id));
-        return [...prev, ...unique];
-      });
-      setNext(res?.next || null);
-    } catch {
-      setError('Failed to load more posts.');
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  // Read “start=<postId>” from URL, if present
+  const params = new URLSearchParams(location.search);
+  const startId = params.get('start'); // e.g. "23"
 
-  const refreshContent = async () => {
+  // ───── Feed state ────────────────────────────────────────────────────────
+  const [posts, setPosts]       = useState([]);
+  const [events, setEvents]     = useState([]);
+  const [next, setNext]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [sort, setSort]         = useState('newest');
+  const [error, setError]       = useState(null);
+
+  // CreatePost modal + scroll-trigger state
+  const [showModal, setShowModal]   = useState(false);
+  const createCardRef = useRef(null);
+  const [showBubble, setShowBubble] = useState(false);
+
+  // ───── Load initial feed & events ────────────────────────────────────────
+  const refreshContent = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const postRes = await fetchPosts(city, sort);
+      // 1) Fetch paginated posts + events in parallel
+      const postRes  = await fetchPosts(city, sort);
       const eventRes = await fetchEvents(city);
-      setPosts(postRes?.results || []);
-      setEvents(eventRes?.results || []);
-      setNext(postRes?.next || null);
+
+      // 2) Put posts + events into state
+      setPosts(postRes.results || []);
+      setEvents(eventRes.results || []);
+      setNext(postRes.next || null);
+
+      // 3) If ?start=<id> is present, fetch that single post and prepend it
+      if (startId) {
+        try {
+          const featured = await fetchPostById(startId);
+          if (featured && featured.id) {
+            setPosts((prev) => {
+              // Filter out any duplicate of “start” and then put it at front
+              const deduped = prev.filter((p) => p.id !== featured.id);
+              return [featured, ...deduped];
+            });
+          }
+        } catch {
+          // If fetchPostById fails (e.g. post not found), we just ignore
+          console.warn(`Could not fetch postId=${startId}`);
+        }
+      }
     } catch {
       setError('Failed to load content.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [city, sort, startId]);
 
+  // Whenever “city” or “sort” or “startId” changes, refreshContent
   useEffect(() => {
-    if (!city) return;
-    refreshContent();
-  }, [city, sort]);
+    if (city) refreshContent();
+  }, [city, sort, startId, refreshContent]);
 
-  const lastElementRef = useCallback(node => {
-    if (loading || loadingMore) return;
-    if (observer.current) observer.current.disconnect();
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && next) loadPosts(next);
-    });
-    if (node) observer.current.observe(node);
-  }, [loading, loadingMore, next]);
+  // ───── Infinite‐scroll “load more” logic ──────────────────────────────────
+  const observer = useRef();
+  const lastRef  = useCallback(
+    (node) => {
+      if (loading || loadingMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && next) {
+          setLoadingMore(true);
+          fetchPosts(city, sort, next)
+            .then((res) => {
+              const newOnes = (res.results || []).filter(
+                (p) => !posts.find((old) => old.id === p.id)
+              );
+              setPosts((prev) => [...prev, ...newOnes]);
+              setNext(res.next || null);
+            })
+            .catch(() => {
+              /* ignore */
+            })
+            .finally(() => setLoadingMore(false));
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [loading, loadingMore, next, city, sort, posts]
+  );
 
+  // ───── Mobile “Create Post” bubble logic ──────────────────────────────────
   useEffect(() => {
-    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    if (!createCardRef.current) return;
+    const io = new IntersectionObserver(
+      ([e]) => setShowBubble(!e.isIntersecting),
+      { threshold: 0 }
+    );
+    io.observe(createCardRef.current);
+    return () => io.disconnect();
   }, []);
 
   if (!city) return <CitySelectorModal />;
 
   return (
-    <main className="max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">
-      <div className="flex flex-col md:flex-row md:justify-between gap-4 mb-4">
-        <CityFilter />
-        <SortFilter sort={sort} setSort={setSort} />
-      </div>
-
+    <>
+      {/* Desktop: full CreatePost */}
       {user && (
-        <CreatePost
-          onPostCreated={async (newPost) => {
-            const fullPost = await fetchPostById(newPost.id);
-            setPosts(prev => [fullPost || newPost, ...prev]);
-          }}
-        />
-      )}
-
-      <h1 className="text-2xl font-bold text-center mb-6 text-blue-700 dark:text-blue-300">
-        📍 {city.charAt(0).toUpperCase() + city.slice(1)} Community Feed
-      </h1>
-
-      {loading && <p className="text-center text-gray-500 dark:text-gray-400">Loading content...</p>}
-      {error && (
-        <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-center dark:bg-red-900 dark:text-red-300">
-          {error}
-        </div>
-      )}
-      {!loading && posts.length === 0 && events.length === 0 && !error && (
-        <p className="text-center text-gray-600 dark:text-gray-400">
-          No content yet. Be the first to post in your city!
-        </p>
-      )}
-
-      {mixContent(posts, events).map(item => (
-        <div key={`${item.type}-${item.data.id}`} className="mb-6">
-          {item.type === 'post' ? (
-            <FeedCard post={item.data} />
-          ) : (
-            <div className="border rounded-lg p-4 shadow bg-yellow-50 dark:bg-yellow-900">
-              <EventCard event={item.data} />
-            </div>
-          )}
-        </div>
-      ))}
-
-      <div ref={lastElementRef} className="h-10" />
-
-      {showScrollTop && (
-        <div className="fixed bottom-6 right-6 z-20">
-          <button
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              refreshContent();
+        <div className="hidden md:block max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">
+          <CreatePost
+            onPostCreated={async (newPost) => {
+              const full = await fetchPostById(newPost.id);
+              setPosts((prev) => [full || newPost, ...prev]);
             }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-blue-700 transition focus:outline-none"
-          >
-            ⟳ Refresh
-          </button>
+          />
         </div>
       )}
-    </main>
+
+      {/* Mobile: shadowed “Create Post” card */}
+      {user && (
+        <div
+          ref={createCardRef}
+          className="md:hidden mx-4 mb-4 p-4 bg-white dark:bg-gray-900 rounded-xl shadow cursor-pointer"
+          onClick={() => setShowModal(true)}
+        >
+          <h3 className="text-lg font-medium">Create Post</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Tap to share something new…
+          </p>
+        </div>
+      )}
+
+      {/* Mobile: floating bubble when card scrolls off */}
+      {user && showBubble && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="fixed bottom-6 right-6 z-50 p-4 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 focus:outline-none transition"
+        >
+          ＋
+        </button>
+      )}
+
+      {/* Modal for CreatePost */}
+      {showModal && (
+        <div
+          className="fixed items-center inset-0 bg-black bg-opacity-50 flex justify-center p-4 z-40 overflow-auto"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-gray-900 rounded-xl p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute cursor-pointer top-4 right-4 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            >
+              ✕
+            </button>
+            <CreatePost
+              onPostCreated={async (newPost) => {
+                const full = await fetchPostById(newPost.id);
+                setPosts((prev) => [full || newPost, ...prev]);
+                setShowModal(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">
+        <div className="flex flex-col md:flex-row md:justify-between gap-4 mb-4">
+          <CityFilter />
+          <SortFilter sort={sort} setSort={setSort} />
+        </div>
+
+        {loading && (
+          <p className="text-center text-gray-500 dark:text-gray-400">
+            Loading content… 
+          </p>
+        )}
+        {error && (
+          <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 p-3 rounded mb-4 text-center">
+            {error}
+          </div>
+        )}
+        {!loading && posts.length + events.length === 0 && !error && (
+          <p className="text-center text-gray-600 dark:text-gray-400 mt-20">
+            No content yet. Be the first to post in your city!
+          </p>
+        )}
+
+        {mixContent(posts, events).map((item, idx) => (
+          <div key={`${item.type}-${idx}`} className="mb-6">
+            {item.type === 'post' ? (
+              <FeedCard post={item.data} />
+            ) : (
+              <div className="rounded-lg shadow">
+                <EventCard event={item.data} />
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* sentinel for infinite scroll */}
+        <div ref={lastRef} className="h-10" />
+        {loadingMore && (
+          <p className="text-center text-gray-500 dark:text-gray-400 mt-2">
+            Loading more… 
+          </p>
+        )}
+      </main>
+    </>
   );
 }
 
-export default Home;

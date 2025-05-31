@@ -1,8 +1,8 @@
 // src/hooks/useGroupData.js
 import { useState, useEffect, useRef, useCallback } from 'react'
-import api from '../api'                   // your axios instance
-import * as groupApi from '../requests/group'
-
+import api from '../api'                  // your axios instance
+//import * as groupApi from '../requests/group'  // includes getGroupDetail, getGroupMembers, getGroupPosts
+import {getGroupPosts, getGroupDetail, getGroupMembers} from '../requests'
 // ———————————————
 // 1️⃣ Group Detail
 // ———————————————
@@ -16,9 +16,9 @@ export function useGroupDetail(groupId) {
     setLoading(true)
     setError(null)
 
-    groupApi.getGroupDetail(groupId)
-      .then(res => {
-        if (!canceled) setGroup(res.data)
+    getGroupDetail(groupId)
+      .then(data => {
+        if (!canceled) setGroup(data)
       })
       .catch(err => {
         if (!canceled) setError(err)
@@ -38,7 +38,7 @@ export function useGroupDetail(groupId) {
 // 2️⃣ Group Members
 // ———————————————
 export function useGroupMembers(groupId) {
-  const [members, setMembers]         = useState([])
+  const [members, setMembers]             = useState([])
   const [loadingMembers, setLoadingMembers] = useState(true)
   const [errorMembers, setErrorMembers]     = useState(null)
 
@@ -47,7 +47,7 @@ export function useGroupMembers(groupId) {
     setLoadingMembers(true)
     setErrorMembers(null)
 
-    groupApi.getGroupMembers(groupId)
+    getGroupMembers(groupId)
       .then(res => {
         if (canceled) return
         const raw = res.data
@@ -76,43 +76,54 @@ export function useGroupMembers(groupId) {
 // 3️⃣ Paginated Group Posts
 // ————————————————————————
 export function usePaginatedGroupPosts(groupId) {
-  const [posts, setPosts]       = useState([])
+  const [posts, setPosts]               = useState([])
   const [loadingPosts, setLoadingPosts] = useState(false)
-  const [hasMore, setHasMore]   = useState(false)
-  const [nextUrl, setNextUrl]   = useState(null)
+  const [hasMore, setHasMore]           = useState(false)
+  const [nextUrl, setNextUrl]           = useState(null)
   const observer = useRef()
 
   const load = useCallback(async (url = null) => {
     setLoadingPosts(true)
     try {
-      // decide which endpoint to call
       let res
+
       if (url) {
-        // if the API gave us a full next-page URL
+        // subsequent pages: full URL from DRF
         res = await api.get(url)
       } else {
-        // first load: use your group posts endpoint
-        res = await groupApi.getGroupPosts(groupId)
+        // first page: call our group posts endpoint
+        res = await getGroupPosts(groupId)
       }
 
-      const data = res.data
-      // normalize between DRF paginated { results, next } vs bare array
-      const list = Array.isArray(data?.results)
-        ? data.results
-        : Array.isArray(data)
-          ? data
-          : []
+      // your console.log(res) showed this shape:
+      // {
+      //   data: {
+      //     count: 1,
+      //     next: null,
+      //     previous: null,
+      //     results: [/* your post objects */]
+      //   },
+      //   status: 200,
+      //   ...
+      // }
 
+    const data = res;  // because your .then(res => res.data) returns data directly
+    const {
+    results = [],
+    next = null
+    } = data;
+
+      // append only new posts
       setPosts(prev => {
         const seen = new Set(prev.map(p => p.id))
         return [
           ...prev,
-          ...list.filter(p => !seen.has(p.id))
+          ...results.filter(p => !seen.has(p.id))
         ]
       })
 
-      setNextUrl(data.next ?? null)
-      setHasMore(Boolean(data.next))
+      setNextUrl(next)
+      setHasMore(Boolean(next))
     } catch (err) {
       console.error('Error loading group posts', err)
     } finally {
@@ -120,13 +131,13 @@ export function usePaginatedGroupPosts(groupId) {
     }
   }, [groupId])
 
-  // initial load / reload when group changes
+  // on mount or when groupId changes, reset and load first page
   useEffect(() => {
     setPosts([])
     load(null)
   }, [groupId, load])
 
-  // intersection‐observer for infinite scroll
+  // intersection observer for infinite scroll
   const sentinelRef = useCallback(node => {
     if (loadingPosts) return
     observer.current?.disconnect()
@@ -138,5 +149,5 @@ export function usePaginatedGroupPosts(groupId) {
     if (node) observer.current.observe(node)
   }, [loadingPosts, hasMore, nextUrl, load])
 
-  return { posts, loadingPosts, hasMore, sentinelRef }
+  return { posts, loadingPosts, setPosts, hasMore, sentinelRef }
 }

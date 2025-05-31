@@ -14,6 +14,10 @@ module.exports = {
         animation: {
           fadeIn: 'fadeIn 0.5s ease-in-out',
         },
+        colors: {
+          slate: require('tailwindcss/colors').slate,
+        }
+    }
       },
     },
     plugins: [],

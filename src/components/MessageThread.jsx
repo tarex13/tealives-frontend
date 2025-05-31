@@ -1,52 +1,78 @@
-import React, { useEffect, useState, useRef } from 'react'
+// src/components/MessageThread.jsx
+import React, { useEffect, useState, useRef, useCallback } from 'react'
+import Spinner from './Spinner'
 import { fetchThread, sendMessage } from '../requests'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { FiSend } from 'react-icons/fi'
+import classNames from 'classnames'
 
-function MessageThread({ userId, recipientName, currentUserId }) {
+export default function MessageThread({
+  userId,
+  recipientName,
+  currentUserId,
+}) {
   const [messages, setMessages] = useState([])
-  const [content, setContent] = useState('')
-  const [typing, setTyping] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const ws = useRef(null)
-  const messagesEndRef = useRef(null)
+  const [content, setContent]   = useState('')
+  const [typing, setTyping]     = useState(false)
+  const [loading, setLoading]   = useState(true)
 
-  const token = localStorage.getItem('userToken')
+  const wsRef            = useRef(null)
+  const endRef           = useRef(null)
+  const typingTimeoutRef = useRef(null)
+  const token            = localStorage.getItem('accessToken')
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // scroll to bottom any time messages change
+  const scrollToBottom = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
 
+  useEffect(scrollToBottom, [messages, scrollToBottom])
+
+  // initial load of thread
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
       try {
-        const res = await fetchThread(userId)
-        setMessages(res)
+        const data = await fetchThread(userId)
+        if (!cancelled) setMessages(data)
       } catch {
-        setMessages([])
+        if (!cancelled) setMessages([])
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
+
     load()
+    return () => { cancelled = true }
   }, [userId])
 
+  // WebSocket setup
   useEffect(() => {
-    ws.current = new WebSocket(`ws://localhost:8000/ws/chat/${userId}/?token=${token}`)
+    if (!userId || !token) return
+    const socket = new WebSocket(
+      `ws://localhost:8000/ws/chat/${userId}/?token=${token}`
+    )
+    wsRef.current = socket
 
-    ws.current.onopen = () => console.log('WebSocket connected')
-    ws.current.onclose = () => console.log('WebSocket disconnected')
+    socket.onopen = () => console.log('WS connected')
+    socket.onclose = () => console.log('WS disconnected')
 
-    ws.current.onmessage = (e) => {
+    socket.onmessage = (e) => {
       const data = JSON.parse(e.data)
 
       if (data.typing && data.sender_id === userId) {
         setTyping(true)
-        setTimeout(() => setTyping(false), 3000)
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = setTimeout(() => {
+          setTyping(false)
+        }, 1500)
         return
       }
 
-      setMessages(prev => [
-        ...prev,
+      setMessages(ms => [
+        ...ms,
         {
           content: data.message,
           is_own: data.sender_id === currentUserId,
@@ -55,87 +81,142 @@ function MessageThread({ userId, recipientName, currentUserId }) {
       ])
     }
 
-    return () => ws.current.close()
+    return () => {
+      clearTimeout(typingTimeoutRef.current)
+      socket.close()
+    }
   }, [userId, currentUserId, token])
 
-  useEffect(scrollToBottom, [messages])
-
-  const handleSend = async () => {
+  // send via WS + API
+  const handleSend = useCallback(async () => {
     if (!content.trim()) return
 
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ message: content }))
+    // optimistic append
+    const newMsg = {
+      content,
+      is_own: true,
+      sent_at: new Date().toISOString(),
+    }
+    setMessages(ms => [...ms, newMsg])
+    setContent('')
+    scrollToBottom()
+
+    // send over WS
+    const sock = wsRef.current
+    if (sock && sock.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify({ message: content }))
     }
 
+    // persist via REST
     try {
       await sendMessage(userId, content)
     } catch (err) {
-      console.error('Failed to persist message via API:', err)
+      console.error('Persist failed:', err)
+      // you could mark this message as failed here
     }
+  }, [content, userId, scrollToBottom])
 
-    setMessages(prev => [
-      ...prev,
-      { content, is_own: true, sent_at: new Date().toISOString() },
-    ])
-    setContent('')
-  }
-
-  const handleTyping = () => {
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ typing: true }))
+  // notify peer that we are typing
+  const handleTyping = useCallback(() => {
+    const sock = wsRef.current
+    if (sock && sock.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify({ typing: true }))
     }
-  }
+  }, [])
 
   return (
-    <div className="p-4">
-      <h3 className="text-lg font-bold mb-2">Chat with {recipientName}</h3>
-      <div className="border rounded h-64 overflow-y-auto p-2 mb-4 bg-gray-50">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+      {/* Header */}
+      <header className="flex-shrink-0 px-6 py-4 bg-gray-100 dark:bg-gray-700 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Chat with {recipientName}
+        </h2>
+      </header>
+
+      {/* Messages */}
+      <div
+        className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-gray-50 dark:bg-gray-900 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600"
+        role="log"
+        aria-live="polite"
+      >
         {loading ? (
-          <p>Loading...</p>
+          <div className="flex justify-center my-8">
+            <Spinner size="lg" />
+          </div>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-gray-500">No messages yet. Say hello!</p>
+          <p className="text-center text-gray-500 dark:text-gray-400">
+            No messages yet. Say hello!
+          </p>
         ) : (
-          messages.map((m, i) => (
-            <div
-              key={i}
-              className={`text-sm mb-2 ${m.is_own ? 'text-right' : 'text-left'}`}
-            >
-              <span className="inline-block bg-white p-2 rounded shadow-sm">
-                {m.content}
-              </span>
-              <p className="text-xs text-gray-400 mt-1">
-                {formatDistanceToNow(parseISO(m.sent_at), { addSuffix: true })}
-              </p>
-            </div>
-          ))
+          messages.map((m, i) => {
+            const bubbleClasses = classNames(
+              'inline-block px-4 py-2 rounded-lg max-w-[75%] shadow',
+              m.is_own
+                ? 'bg-teal-500 text-white rounded-tr-2xl rounded-br-2xl'
+                : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-tl-2xl rounded-bl-2xl'
+            )
+            const containerClasses = classNames(
+              'flex flex-col',
+              m.is_own ? 'items-end' : 'items-start'
+            )
+            return (
+              <div key={i} className={containerClasses}>
+                <div className={bubbleClasses}>{m.content}</div>
+                <span className="mt-1 text-2xs text-gray-400 dark:text-gray-500">
+                  {formatDistanceToNow(parseISO(m.sent_at), { addSuffix: true })}
+                </span>
+              </div>
+            )
+          })
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </div>
 
-      {typing && <p className="text-xs text-gray-500 italic">User is typing...</p>}
+      {/* Typing indicator */}
+      {typing && (
+        <div className="px-6 py-2 text-center text-xs italic text-gray-500 dark:text-gray-400">
+          {recipientName} is typing…
+        </div>
+      )}
 
-      <div className="flex gap-2 mt-2">
+      {/* Composer */}
+      <div className="flex-shrink-0 px-6 py-4 bg-gray-100 dark:bg-gray-700 flex items-center space-x-2">
         <input
-          className="flex-1 border rounded p-2"
-          placeholder="Type your message..."
+          type="text"
+          aria-label="Type your message"
+          placeholder="Type your message…"
           value={content}
           onChange={e => {
             setContent(e.target.value)
             handleTyping()
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSend()
-          }}
+          onKeyDown={e => e.key === 'Enter' && handleSend()}
+          className="
+            flex-1
+            px-4 py-2
+            bg-white dark:bg-gray-800
+            ring-1 ring-gray-300 dark:ring-gray-600
+            rounded-full
+            focus:outline-none focus:ring-2 focus:ring-teal-400
+            transition
+          "
         />
         <button
-          className="bg-blue-600 text-white px-4 py-2 rounded"
           onClick={handleSend}
+          aria-label="Send message"
+          className="
+            p-2 rounded-full
+            bg-teal-500 hover:bg-teal-600
+            text-white
+            shadow-md
+            transition
+            disabled:opacity-50 disabled:cursor-not-allowed
+          "
+          disabled={!content.trim()}
         >
-          Send
+          <FiSend className="w-5 h-5" />
         </button>
       </div>
     </div>
   )
 }
-
-export default MessageThread

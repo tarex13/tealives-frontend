@@ -7,12 +7,14 @@ import React, {
   useCallback,
   useRef
 } from 'react';
+import { createWebSocket } from '../utils/websocket';
 import api from '../api';
-
+import { useAuth } from '../context/AuthContext';
 const NotificationContext = createContext();
 export const useNotification = () => useContext(NotificationContext);
 
 export const NotificationProvider = ({ children }) => {
+      const { user } = useAuth();
   // Toast state
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState('info');
@@ -22,7 +24,8 @@ export const NotificationProvider = ({ children }) => {
 
   // Fetch from REST, always normalize to an array
   const fetchNotifications = useCallback(async () => {
-    try {
+    if(user)
+{    try {
       const res = await api.get('notifications/');
       const data = res.data;
       // data might be { results: [...] } or an array
@@ -35,6 +38,7 @@ export const NotificationProvider = ({ children }) => {
     } catch (err) {
       console.error('Fetch notifs failed', err);
     }
+}
   }, []);
 
   // Mark one as read (REST + local)
@@ -61,31 +65,52 @@ export const NotificationProvider = ({ children }) => {
   // WebSocket ref
   const ws = useRef(null);
 
-  useEffect(() => {
-    fetchNotifications();
-    // poll fallback every 30s
-    const iv = setInterval(fetchNotifications, 30000);
+useEffect(() => {
+  if (!user) return;
 
-    // setup WS
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const socketUrl = `${protocol}://${window.location.host}/ws/notifications/?token=${
-      localStorage.getItem('access')
-    }`;
-    ws.current = new WebSocket(socketUrl);
+  fetchNotifications(); // Initial fetch
+  const iv = setInterval(fetchNotifications, 30000); // Poll every 30s
 
-    ws.current.onmessage = ({ data }) => {
-      const newNotification = JSON.parse(data);
-      setNotifications((prev) => [newNotification, ...prev]);
-      showNotification(newNotification.content, 'info');
-    };
-    ws.current.onopen = () => console.log('Notifications WS connected');
-    ws.current.onclose = () => console.log('Notifications WS disconnected');
+  const token = localStorage.getItem('accessToken');
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = window.location.hostname; // auto match localhost/production
+  const port = '8000'; // match Daphne
+  const socketUrl = `${protocol}://${host}:${port}/ws/notifications/?token=${token}`;
 
-    return () => {
-      clearInterval(iv);
-      if (ws.current) ws.current.close();
-    };
-  }, [fetchNotifications]);
+  if (!token) {
+    console.warn('WebSocket not connected: missing token');
+    return;
+  }
+
+  const socket = createWebSocket('/ws/notifications/', token);
+  ws.current = socket;
+
+  socket.onopen = () => {
+    console.log('Notifications WS connected');
+  };
+
+  socket.onmessage = ({ data }) => {
+    const newNotification = JSON.parse(data);
+    setNotifications((prev) => [newNotification, ...prev]);
+    showNotification(newNotification.content, 'info');
+  };
+
+  socket.onclose = (e) => {
+    console.log('Notifications WS disconnected', e);
+  };
+
+  socket.onerror = (e) => {
+    console.error('WebSocket error', e);
+  };
+
+  return () => {
+    clearInterval(iv);
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.close();
+    }
+  };
+}, [user]); // Only depend on `user`
+
 
   // Now that notifications is guaranteed to be an array, this is safe:
   const unreadCount = notifications.filter((n) => !n.is_read).length;

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Spinner from './components/Spinner';
 import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-
+import { createWebSocket } from './utils/websocket';
 import Home from './pages/Home';
 import GroupDirectory from './pages/GroupDirectory';
 import Marketplace from './pages/Marketplace';
@@ -51,14 +51,61 @@ import CreateGroup from './pages/CreateGroup';
 import GroupDetailPage from './components/GroupDetailPage';
 import MarketplaceItemDetail from './pages/MarketplaceItemDetail';
 import BusinessAnalytics from './pages/BusinessAnalytics';
+import AdminReportsDashboard from './pages/AdminReportsDashboard';
+import EditPostPage from './pages/EditPostPage';
 
 
 function App() {
   const { user, loading } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(() => { return localStorage.getItem('sidebarOpen') === 'true'});
-  useEffect(() => {localStorage.setItem('sidebarOpen', sidebarOpen)}, [sidebarOpen]);
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    localStorage.getItem('sidebarOpen') === 'true'
+  );
+  const [sidebarMinimized, setSidebarMinimized] = useState(() =>
+    localStorage.getItem('sidebarMinimized') === 'true'
+  );
+
+  // Persist to localStorage whenever the flags change
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', sidebarOpen);
+    localStorage.setItem('sidebarMinimized', sidebarMinimized);
+  }, [sidebarOpen, sidebarMinimized]);
+
+  // As soon as `user` exists (logged in), force the sidebar to open.
+  // Conversely, when `user` becomes null (logged out), you could automatically close it.
+  useEffect(() => {
+    if (user) {
+      setSidebarOpen(true);
+    } else {
+      // Optionally, close it when the user logs out:
+      setSidebarOpen(false);
+    }
+  }, [user]);
+   const wsNotifRef = useRef(null);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const token = localStorage.getItem('accessToken');
+    const ws = createWebSocket('/ws/notifications/', token);
+    wsNotifRef.current = ws;
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+    };
+
+    ws.onerror = (e) => console.error('Notification WebSocket error', e);
+
+    return () => {
+      ws.close();
+    };
+  }, [user]);
+
+  const toggleSidebar = () => setSidebarOpen(o => !o);
+  const toggleMinimize = () => setSidebarMinimized(m => !m);
+
   if (loading) return null;
+
   return (
     <ErrorBoundary>
       <NotificationProvider>
@@ -66,13 +113,25 @@ function App() {
         <AppInitializer />
         <div className="min-h-screen py-10 bg-gray-50 dark:bg-gray-600 text-gray-800 dark:text-white flex relative">
           {user &&  (
-            <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
+                 <Sidebar
+              isOpen={sidebarOpen}
+              setSidebarOpen={setSidebarOpen}
+              toggleSidebar={toggleSidebar}
+              isMinimized={sidebarMinimized}
+              toggleMinimize={toggleMinimize}
+            />
           )}
 
-          <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'sm:ml-64' : 'ml-0'}`}>
-            <Navbar toggleSidebar={toggleSidebar} />
-
-            <main className="px-2 sm:px-4 pt-[5vh] pb-10">
+ <div
+   className={`
+     flex-1 max-w-full transition-all duration-300
+     ${sidebarOpen
+       ? (sidebarMinimized ? 'md:ml-12' : 'lg:ml-64')
+       : 'md:ml-0'}
+   `}
+ >
+   <Navbar toggleSidebar={toggleSidebar} />
++   <main className={`px-2 sm:px-4 pt-[5vh] pb-10     `}>
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<Home />} />
@@ -89,14 +148,14 @@ function App() {
                 <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/marketplace/:id" element={<MarketplaceItemDetail />} />
 
-
                 {/* Protected Routes */}
                 <Route element={<PrivateRoute />}>
                 <Route path="/marketplace/:id/bid" element={<BidForm />} />
+                 <Route path="/posts/:postId/edit" element={<EditPostPage />} />
                 <Route path="/business/analytics" element={<BusinessAnalytics />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/edit" element={<EditProfile />} />
-                  <Route path="/inbox" element={<Inbox />} />
+                  <Route path="/inbox" element={<Inbox setSidebarMinimized={setSidebarMinimized}/>} />
                   <Route path="/saved" element={<SavedListings />} />
                   <Route path="/my-swapps" element={<MySwapps />} />
                   <Route path="/events/create" element={<CreateEvent />} />
@@ -104,6 +163,7 @@ function App() {
                   <Route path="/mod/dashboard" element={<ModDashboard />} />
                   <Route path="/mod" element={<ModPanel />} />
                   <Route path="/mod/feedback" element={<AdminFeedback />} />
+                  <Route path="/mod/reports" element={<AdminReportsDashboard />} />
                   <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
                   <Route path="/groups/create" element={<CreateGroup />} />
                   <Route path="/groups/:groupId/invite" element={<InviteMembers />} />

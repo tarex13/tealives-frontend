@@ -1,49 +1,28 @@
-// src/components/NotificationDropdown.jsx
-import React, { useEffect, useState, useRef } from 'react';
-import { fetchNotifications, markNotificationRead } from '../requests';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 
 export default function NotificationDropdown() {
   const { user } = useAuth();
+  const { notifications, markAsRead } = useNotification();
   const navigate = useNavigate();
 
-  const [notifs, setNotifs] = useState([]);
-  const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
 
-  // Fetch from API
-  const load = async () => {
-    if (!user?.access) return;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const handleClick = async (n) => {
     try {
-      const data = await fetchNotifications();
-      const list = Array.isArray(data)
-        ? data
-        : Array.isArray(data.results)
-        ? data.results
-        : [];
-      setNotifs(list);
-      setError('');
+      await markAsRead(n.id);
+      if (n.link) navigate(n.link);
     } catch {
-      setError('Failed to load notifications.');
-      setNotifs([]);
+      console.error('Could not mark notification as read.');
     }
   };
 
-  // initial + polling every 30s
-  useEffect(() => {
-    load();
-    const iv = setInterval(load, 30000);
-    return () => clearInterval(iv);
-  }, [user?.access]);
-
-  // reload when opened
-  useEffect(() => {
-    if (open) load();
-  }, [open]);
-
-  // click-outside to close
+  // Close on outside click
   useEffect(() => {
     const onClick = (e) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
@@ -53,18 +32,6 @@ export default function NotificationDropdown() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
-
-  const handleClick = async (n) => {
-    try {
-      await markNotificationRead(n.id);
-      setNotifs((prev) => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x));
-      if (n.link) navigate(n.link);
-    } catch {
-      setError('Couldn’t mark read.');
-    }
-  };
-
-  const unreadCount = notifs.filter((n) => !n.is_read).length;
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -85,20 +52,22 @@ export default function NotificationDropdown() {
       {/* Dropdown */}
       {open && (
         <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto bg-white dark:bg-gray-800 shadow-lg rounded p-2 z-50">
-          {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
-
-          {notifs.length === 0 ? (
+          {notifications.length === 0 ? (
             <p className="text-sm text-gray-500">No notifications</p>
           ) : (
             <>
               <button
                 className="text-xs text-blue-600 mb-2 underline"
-                onClick={() => setNotifs((prev) => prev.map(n => ({ ...n, is_read: true })))}
+                onClick={() =>
+                  notifications.forEach((n) => {
+                    if (!n.is_read) markAsRead(n.id);
+                  })
+                }
               >
                 Mark all read
               </button>
               <ul>
-                {notifs.map((n) => (
+                {notifications.map((n) => (
                   <li
                     key={n.id}
                     onClick={() => handleClick(n)}

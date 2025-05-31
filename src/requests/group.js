@@ -1,6 +1,10 @@
 // src/requests/group.js
 import api from '../api'
 
+export function getGroupPosts(groupId) {
+  return api.get(`/groups/${groupId}/posts/`)
+}
+
 export const getGroupDetail = (groupId) =>
   api.get(`groups/${groupId}/`)
 
@@ -14,7 +18,7 @@ export const leaveGroup = (groupId) =>
   api.post(`groups/${groupId}/leave/`)
 
 export const promoteModerator = (groupId, userId) =>
-  api.post(`groups/${groupId}/moderators/${userId}/promote/`)
+  api.post(`groups/${groupId}/promote/${userId}/`)
 
 export const demoteModerator = (groupId, userId) =>
-  api.post(`groups/${groupId}/moderators/${userId}/demote/`)
+  api.post(`groups/${groupId}/demote/${userId}/`)
