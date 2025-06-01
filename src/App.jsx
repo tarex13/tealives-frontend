@@ -53,7 +53,7 @@ import MarketplaceItemDetail from './pages/MarketplaceItemDetail';
 import BusinessAnalytics from './pages/BusinessAnalytics';
 import AdminReportsDashboard from './pages/AdminReportsDashboard';
 import EditPostPage from './pages/EditPostPage';
-
+import { SpeedInsights } from "@vercel/speed-insights/react"
 
 function App() {
   const { user, loading } = useAuth();
