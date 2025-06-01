@@ -41,9 +41,7 @@ function MarketplaceCard({ item }) {
 
       {/* Media Carousel */}
       {Array.isArray(item.images) && item.images.length > 0 && (
-        <Link to={`/marketplace/${item.id}`}>
           <MarketplaceCarousel media={item.images} price={item.price} />
-        </Link>
       )}
 
       {/* Title and Description */}

@@ -24,27 +24,27 @@ export default function Sidebar({
   toggleMinimize,
 }) {
   const { user } = useAuth();
-  const isAdmin = user?.is_superuser;
-  const isStaff = user?.is_staff;
+  const isAdmin     = user?.is_superuser;
+  const isStaff     = user?.is_staff;
   const isModerator = user?.is_moderator;
-  const isBusiness = user?.is_business;
+  const isBusiness  = user?.is_business;
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [moderationOpen, setModerationOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen]       = useState(false);
+  const [moderationOpen, setModerationOpen]   = useState(false);
 
-  // If a user is logged in, force the sidebar open on desktop (lg+).  
-  // But on tablet/mobile we rely on `isOpen` alone.
+  // If a user is logged in, force the sidebar open on desktop (lg+).
+  // On tablet/mobile we still rely on `isOpen`.
   useEffect(() => {
     if (user) {
-      // On desktop, we want it “open” (but collapse/minimize is handled by isMinimized).
-      // On tablet/mobile, isOpen remains false until toggleSidebar is called.
-      // We won't call setSidebarOpen(true) here because that would open the slide‐in on tablet immediately.
+      // No need to call setSidebarOpen(true) here; we handle desktop via CSS.
     }
   }, [user]);
 
-  // Utility classes for links
+  // ────────────────────────────────────────────────────────────────────
+  // 1) DESKTOP (lg+) FULL SIDEBAR, COLLAPSIBLE BY isMinimized
+  // ────────────────────────────────────────────────────────────────────
   const linkClasses = ({ isActive }) =>
-    `flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-all 
+    `flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-all
      ${isActive
        ? 'bg-blue-100 dark:bg-blue-600 text-blue-900 dark:text-white'
        : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300'
@@ -55,9 +55,6 @@ export default function Sidebar({
 
   return (
     <>
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* 1️⃣ DESKTOP (lg+) FULL SIDEBAR, COLLAPSIBLE BY isMinimized */}
-      {/* ──────────────────────────────────────────────────────────────────── */}
       <aside
         className={`
           hidden md:flex flex-col
@@ -71,7 +68,7 @@ export default function Sidebar({
           transition-all duration-200 ease-in-out
         `}
       >
-        {/* Header: “Menu” title + Minimize/Expand button */}
+        {/* Header: “Menu” + Minimize button */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           {!isMinimized && <h2 className="text-xl font-bold">Menu</h2>}
           <button
@@ -84,7 +81,7 @@ export default function Sidebar({
         </div>
 
         {isMinimized ? (
-          // ─────── Minimized: Just a vertical stack of icon‐buttons ───────
+          // ─────── Minimized: Icon buttons only ───────
           <div className="flex flex-col items-center py-4 space-y-4">
             <NavLink to={`/profile/${user?.username}`} className={iconOnlyClasses} title="Profile">
               <User className="w-5 h-5 text-gray-800 dark:text-gray-200" />
@@ -151,7 +148,7 @@ export default function Sidebar({
                 className="block px-3 py-2 rounded-lg bg-red-100 dark:bg-red-800 text-red-700 dark:text-white font-bold hover:bg-red-200 dark:hover:bg-red-700 transition"
                 title="Admin Dashboard"
               >
-                <BarChart className="w-5 h-5 inline-block" /> {/* optional icon */}
+                <BarChart className="w-5 h-5 inline-block" />{/* icon + text */}
               </NavLink>
             )}
             {isBusiness && (
@@ -160,12 +157,12 @@ export default function Sidebar({
                 className="block px-3 py-2 rounded-lg bg-green-100 dark:bg-green-800 text-green-700 dark:text-white font-semibold hover:bg-green-200 dark:hover:bg-green-700 transition"
                 title="Business Analytics"
               >
-                <Layers className="w-5 h-5 inline-block" /> {/* optional icon */}
+                <Layers className="w-5 h-5 inline-block" />{/* icon + text */}
               </NavLink>
             )}
           </div>
         ) : (
-          // ─────── Expanded: Full‐text links with icons ───────
+          // ─────── Expanded: Full‐text links ───────
           <nav className="px-4 py-4 space-y-2 text-sm">
             {user && (
               <>
@@ -277,14 +274,11 @@ export default function Sidebar({
         )}
       </aside>
 
-
-
-
       {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* 3️⃣ MOBILE (<md) BOTTOM FAB + BOTTOM SHEET (quick actions)       */}
+      {/* 3) MOBILE (<md) BOTTOM FAB + BOTTOM SHEET (accordion‐style)        */}
       {/* ──────────────────────────────────────────────────────────────────── */}
 
-      {/* Floating Action Button (FAB) at bottom-right */}
+      {/* Floating Action Button (FAB) at bottom‐right */}
       <button
         className="
           fixed bottom-6 right-6 z-50
@@ -303,7 +297,7 @@ export default function Sidebar({
         <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden">
           {/* Backdrop */}
           <div
-            className="fixed inset-0"
+            className="fixed inset-0 bg-black bg-opacity-40"
             onClick={toggleMinimize}
           />
 
@@ -315,42 +309,162 @@ export default function Sidebar({
             p-4 flex flex-col
           ">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Quick Actions</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Quick Actions
+              </h2>
               <button onClick={toggleMinimize}>
-                <X className="w-6 cursor-pointer h-6 text-gray-800 dark:text-gray-200" />
+                <X className="w-6 h-6 text-gray-800 dark:text-gray-200" />
               </button>
             </div>
-            <nav className="flex flex-col space-y-4">
-              <NavLink to={`/profile/${user.username}`} className="flex items-center gap-3" onClick={toggleMinimize}>
-                <User className="w-5 h-5 text-gray-800 dark:text-gray-200" />
+
+            <nav className="flex flex-col space-y-4 overflow-y-auto">
+              {/* Profile, Inbox, Saved (always link) */}
+              <NavLink
+                to={`/profile/${user.username}`}
+                className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                onClick={toggleMinimize}
+              >
+                <User className="w-5 h-5" />
                 <span className="text-base">Profile</span>
               </NavLink>
-              <NavLink to="/inbox" className="flex items-center gap-3" onClick={toggleMinimize}>
-                <Mail className="w-5 h-5 text-gray-800 dark:text-gray-200" />
+
+              <NavLink
+                to="/inbox"
+                className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                onClick={toggleMinimize}
+              >
+                <Mail className="w-5 h-5" />
                 <span className="text-base">Inbox</span>
               </NavLink>
-              <NavLink to="/saved" className="flex items-center gap-3" onClick={toggleMinimize}>
-                <Bookmark className="w-5 h-5 text-gray-800 dark:text-gray-200" />
+
+              <NavLink
+                to="/saved"
+                className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                onClick={toggleMinimize}
+              >
+                <Bookmark className="w-5 h-5" />
                 <span className="text-base">Saved</span>
               </NavLink>
-              <NavLink to="/settings" className="flex items-center gap-3" onClick={toggleMinimize}>
-                <Settings className="w-5 h-5 text-gray-800 dark:text-gray-200" />
-                <span className="text-base">Settings</span>
-              </NavLink>
-              { (isAdmin || isStaff || isModerator) && (
-                <NavLink to="/mod/dashboard" className="flex items-center gap-3 text-red-600" onClick={toggleMinimize}>
-                  <Shield className="w-5 h-5" />
-                  <span className="text-base">Moderator Dashboard</span>
-                </NavLink>
+
+              {/* Settings Accordion */}
+              <div>
+                <button
+                  onClick={() => setSettingsOpen(o => !o)}
+                  className="flex justify-between w-full items-center px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
+                >
+                  <div className="flex items-center gap-3 text-gray-800 dark:text-gray-200">
+                    <Settings className="w-5 h-5" />
+                    <span className="text-base">Settings</span>
+                  </div>
+                  {settingsOpen
+                    ? <ChevronDown className="w-5 h-5 text-gray-800 dark:text-gray-200" />
+                    : <ChevronRight className="w-5 h-5 text-gray-800 dark:text-gray-200" />
+                  }
+                </button>
+                {settingsOpen && (
+                  <div className="pl-4 mt-2 space-y-2">
+                    <NavLink
+                      to="/settings/profile"
+                      className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                      onClick={toggleMinimize}
+                    >
+                      Edit Profile
+                    </NavLink>
+                    <NavLink
+                      to="/settings/reset"
+                      className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                      onClick={toggleMinimize}
+                    >
+                      Reset Password
+                    </NavLink>
+                    <NavLink
+                      to="/settings/notifications"
+                      className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                      onClick={toggleMinimize}
+                    >
+                      Notifications
+                    </NavLink>
+                    <NavLink
+                      to="/settings/privacy"
+                      className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                      onClick={toggleMinimize}
+                    >
+                      Privacy
+                    </NavLink>
+                    <NavLink
+                      to="/settings/preferences"
+                      className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
+                      onClick={toggleMinimize}
+                    >
+                      Preferences
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+
+              {/* Moderation Accordion */}
+              {(isAdmin || isStaff || isModerator) && (
+                <div>
+                  <button
+                    onClick={() => setModerationOpen(o => !o)}
+                    className="flex justify-between w-full items-center px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
+                  >
+                    <div className="flex items-center gap-3 text-red-600">
+                      <Shield className="w-5 h-5" />
+                      <span className="text-base">Moderation</span>
+                    </div>
+                    {moderationOpen
+                      ? <ChevronDown className="w-5 h-5 text-red-600" />
+                      : <ChevronRight className="w-5 h-5 text-red-600" />
+                    }
+                  </button>
+                  {moderationOpen && (
+                    <div className="pl-4 mt-2 space-y-2">
+                      <NavLink
+                        to="/mod/dashboard"
+                        className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}
+                      >
+                        Moderator Dashboard
+                      </NavLink>
+                      <NavLink
+                        to="/mod/feedback"
+                        className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}
+                      >
+                        Feedback Admin
+                      </NavLink>
+                      <NavLink
+                        to="/mod/reports"
+                        className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}
+                      >
+                        Reported Users
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
               )}
-              { isAdmin && (
-                <NavLink to="/admin/dashboard" className="flex items-center gap-3 text-red-600 font-bold" onClick={toggleMinimize}>
+
+              {/* Admin Dashboard */}
+              {isAdmin && (
+                <NavLink
+                  to="/admin/dashboard"
+                  className="flex items-center gap-3 text-red-600 font-bold hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition mt-4"
+                  onClick={toggleMinimize}
+                >
                   <BarChart className="w-5 h-5" />
                   <span className="text-base">Admin Dashboard</span>
                 </NavLink>
               )}
-              { isBusiness && (
-                <NavLink to="/business/analytics" className="flex items-center gap-3 text-green-700 font-semibold" onClick={toggleMinimize}>
+
+              {/* Business Analytics */}
+              {isBusiness && (
+                <NavLink
+                  to="/business/analytics"
+                  className="flex items-center gap-3 text-green-700 font-semibold hover:bg-green-100 dark:hover:bg-green-700 rounded-md px-3 py-2 transition mt-2"
+                  onClick={toggleMinimize}
+                >
                   <Layers className="w-5 h-5" />
                   <span className="text-base">Business Analytics</span>
                 </NavLink>
