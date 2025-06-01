@@ -6,21 +6,11 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <title>My React SPA</title>
-    <!-- Replace or extend with any <link> tags (favicon, fonts, CSS) as needed -->
+    <title>My Vite-React SPA</title>
   </head>
   <body>
-    <!--
-      This <div> is where React will mount your App.
-      Vercel’s rewrite rule will ensure that any URL (e.g. /about, /dashboard)
-      returns this exact HTML, so React Router can inspect window.location.pathname.
-    -->
     <div id="root"></div>
-
-    <!--
-      In a CRA build, this script tag is automatically injected and points to the bundled JS.
-      If you’re using another bundler (Vite, Parcel, etc.), adjust the <script> path accordingly.
-    -->
-    <script src="/static/js/main.js"></script>
+    <!-- Vite uses this to load your React code -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
