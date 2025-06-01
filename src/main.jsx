@@ -4,7 +4,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-
+import { SpeedInsights } from "@vercel/speed-insights/react"
 import { AuthProvider } from './context/AuthContext'
 import { CityProvider } from './context/CityContext'
 
