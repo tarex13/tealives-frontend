@@ -7,6 +7,7 @@ import App from './App'
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { AuthProvider } from './context/AuthContext'
 import { CityProvider } from './context/CityContext'
+import { Analytics } from "@vercel/analytics/react"
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
