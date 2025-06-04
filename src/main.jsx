@@ -7,6 +7,8 @@ import App from './App'
 
 import { AuthProvider } from './context/AuthContext'
 import { CityProvider } from './context/CityContext'
+import { SpeedInsights } from "@vercel/speed-insights/react"
+
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -14,6 +16,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <CityProvider>  {/* Moved outside */}
         <AuthProvider>
           <App />
+          <SpeedInsights />
         </AuthProvider>
       </CityProvider>
     </BrowserRouter>
