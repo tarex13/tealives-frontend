@@ -5,7 +5,7 @@ import api from './api'; // your axios wrapper or fetch helper
 
 export default function AppInitializer() {
   useEffect(() => {
-    api.get('/user/cities/')
+    api.get('cities/')
       .then((res) => {
         setCities(res.data);
       })

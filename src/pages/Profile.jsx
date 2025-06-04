@@ -1,6 +1,6 @@
 // src/pages/Profile.jsx
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePaginatedPosts } from '../hooks/usePaginatedPosts';
 import api from '../api';
@@ -14,65 +14,68 @@ export default function Profile() {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
 
+  // We’ll show both “own ratings” (ratings I’ve given) and “incoming reviews”
   const [listings, setListings] = useState([]);
   const [saved, setSaved] = useState([]);
-  const [myRatings, setMyRatings] = useState([]);
-  const [incomingReviews, setIncomingReviews] = useState([]);
+  const [myRatings, setMyRatings] = useState([]);         // Ratings I have given out
+  const [incomingReviews, setIncomingReviews] = useState([]); // Reviews left for me (if business)
   const [activeTab, setActiveTab] = useState('posts');
 
   const { posts, loading, hasMore, sentinelRef } = usePaginatedPosts(user?.id);
 
-  // 🔄 Fetch listings & saved
+  // ─── Fetch user’s marketplace listings & saved items ─────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
     (async () => {
       try {
         const res = await api.get('marketplace/');
-        const items = Array.isArray(res.data.results) ? res.data.results : res.data;
-        setListings(items.filter(i => i.seller === user.id));
-        setSaved(items.filter(i => i.saved_by_user));
+        const items = Array.isArray(res.data.results)
+          ? res.data.results
+          : res.data;
+        setListings(items.filter((i) => i.seller === user.id));
+        setSaved(items.filter((i) => i.saved_by_user));
       } catch (err) {
         console.error(err);
         showNotification('Failed to load listings.', 'error');
       }
     })();
-  }, [user]);
+  }, [user, showNotification]);
 
-  // 🔄 Fetch your own ratings (ensure array)
+  // ─── Fetch “Ratings I’ve Given” when tab = 'ratings' ───────────────────────────────
   useEffect(() => {
     if (activeTab !== 'ratings') return;
     api.get(`ratings/user/${user.id}/`)
-      .then(res => {
+      .then((res) => {
         const data = Array.isArray(res.data)
           ? res.data
           : Array.isArray(res.data.results)
-            ? res.data.results
-            : [];
+          ? res.data.results
+          : [];
         setMyRatings(data);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error(err);
         showNotification('Failed to load your ratings.', 'error');
       });
-  }, [activeTab, user]);
+  }, [activeTab, user, showNotification]);
 
-  // 🔄 Fetch incoming business reviews
+  // ─── Fetch “Incoming Reviews” (for businesses) when tab = 'reviews' ───────────────
   useEffect(() => {
     if (!user.is_business || activeTab !== 'reviews') return;
     api.get(`reviews/?business=${user.id}`)
-      .then(res => {
+      .then((res) => {
         const data = Array.isArray(res.data)
           ? res.data
           : Array.isArray(res.data.results)
-            ? res.data.results
-            : [];
+          ? res.data.results
+          : [];
         setIncomingReviews(data);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error(err);
         showNotification('Failed to load reviews.', 'error');
       });
-  }, [activeTab, user]);
+  }, [activeTab, user, showNotification]);
 
   if (!user) {
     return (
@@ -82,18 +85,19 @@ export default function Profile() {
     );
   }
 
-  // XP / Level
-  const xp       = user.xp_points ?? 0;
-  const level    = Math.floor(xp / 100);
+  // ─── Compute XP/Level for progress bar ────────────────────────────────────────────
+  const xp = user.xp_points ?? 0;
+  const level = Math.floor(xp / 100);
   const progress = xp % 100;
 
-  // Quick stats
+  // ─── Quick‐stats panels ───────────────────────────────────────────────────────────
   const stats = [
-    { label: 'Posts',    value: posts.length },
+    { label: 'Posts', value: posts.length },
     { label: 'Listings', value: listings.length },
-    { label: 'Saved',    value: saved.length },
+    { label: 'Saved', value: saved.length },
   ];
 
+  // ─── Which tabs to show ────────────────────────────────────────────────────────────
   const tabs = [
     'posts',
     'listings',
@@ -102,7 +106,7 @@ export default function Profile() {
     ...(user.is_business ? ['reviews'] : []),
   ];
 
-  const handleReply = authorId => {
+  const handleReply = (authorId) => {
     navigate(`/messages/thread/${authorId}`);
   };
 
@@ -129,6 +133,7 @@ export default function Profile() {
             <p className="text-sm text-gray-500">{user.bio}</p>
           )}
 
+          {/* — XP / Level Bar — */}
           <div className="mt-4">
             <p className="text-sm font-medium">
               Level {level} — {progress}% to next
@@ -149,7 +154,7 @@ export default function Profile() {
         </Link>
       </div>
 
-      {/* — Business Details — */}
+      {/* — Business Details (if applicable) — */}
       {user.is_business && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
           <h2 className="text-xl font-semibold">Business Details</h2>
@@ -163,13 +168,19 @@ export default function Profile() {
             )}
             <div className="space-y-2 text-sm">
               {user.business_name && (
-                <p><strong>Name:</strong> {user.business_name}</p>
+                <p>
+                  <strong>Name:</strong> {user.business_name}
+                </p>
               )}
               {user.business_type && (
-                <p><strong>Type:</strong> {user.business_type}</p>
+                <p>
+                  <strong>Type:</strong> {user.business_type}
+                </p>
               )}
               {user.business_description && (
-                <p><strong>Description:</strong> {user.business_description}</p>
+                <p>
+                  <strong>Description:</strong> {user.business_description}
+                </p>
               )}
               {user.business_hours && Object.keys(user.business_hours).length > 0 && (
                 <div>
@@ -177,17 +188,23 @@ export default function Profile() {
                   <ul className="list-disc list-inside">
                     {Object.entries(user.business_hours).map(
                       ([day, hrs]) => (
-                        <li key={day}>{day}: {hrs}</li>
+                        <li key={day}>
+                          {day}: {hrs}
+                        </li>
                       )
                     )}
                   </ul>
                 </div>
               )}
               {user.business_locations?.length > 0 && (
-                <p><strong>Locations:</strong> {user.business_locations.join(', ')}</p>
+                <p>
+                  <strong>Locations:</strong> {user.business_locations.join(', ')}
+                </p>
               )}
               {user.contact_email && (
-                <p><strong>Contact:</strong> {user.contact_email}</p>
+                <p>
+                  <strong>Contact:</strong> {user.contact_email}
+                </p>
               )}
               {user.website && (
                 <p>
@@ -207,9 +224,9 @@ export default function Profile() {
         </div>
       )}
 
-      {/* — Quick Stats — */}
+      {/* — Quick Stats Panels — */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {stats.map(s => (
+        {stats.map((s) => (
           <div
             key={s.label}
             className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow text-center"
@@ -220,10 +237,10 @@ export default function Profile() {
         ))}
       </div>
 
-      {/* — Tabs — */}
+      {/* — Tabs Navigation — */}
       <div className="sticky top-0 bg-white dark:bg-gray-900 z-10">
         <div className="flex border-b">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -242,67 +259,69 @@ export default function Profile() {
       {/* — Tab Content — */}
       <div className="space-y-6">
         {activeTab === 'posts' && (
-          posts.length === 0 && !loading ? (
-            <p className="text-center text-gray-500">No posts yet.</p>
-          ) : (
+          <>
+            {posts.length === 0 && !loading && (
+              <p className="text-gray-500">No posts yet.</p>
+            )}
             <div className="space-y-4">
-              {posts.map(p => <FeedCard key={p.id} post={p} />)}
-              {loading && <p className="text-center text-gray-400">Loading…</p>}
-              {hasMore && <div ref={sentinelRef} className="h-1" />}
+              {posts.map((post) => (
+                <FeedCard key={post.id} post={post} />
+              ))}
+              {hasMore && <div ref={sentinelRef} className="text-center text-gray-400">Loading more…</div>}
             </div>
-          )
+          </>
         )}
 
         {activeTab === 'listings' && (
-          listings.length === 0 ? (
-            <p className="text-center text-gray-500">No listings yet.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {listings.map(item => <MarketplaceCard key={item.id} item={item} />)}
-            </div>
-          )
+          <>
+            {listings.length === 0 ? (
+              <p className="text-gray-500">No listings yet.</p>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {listings.map((item) => (
+                  <MarketplaceCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === 'saved' && (
-          saved.length === 0 ? (
-            <p className="text-center text-gray-500">No saved items.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {saved.map(item => <MarketplaceCard key={item.id} item={item} />)}
-            </div>
-          )
+          <>
+            {saved.length === 0 ? (
+              <p className="text-gray-500">No saved items.</p>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {saved.map((item) => (
+                  <MarketplaceCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === 'ratings' && (
-          loading ? (
-            <p className="text-center text-gray-400">Loading ratings…</p>
-          ) : myRatings.length === 0 ? (
-            <p className="text-center text-gray-500">No ratings yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {myRatings.map(r => <ReviewCard key={r.id} review={r} />)}
-            </div>
-          )
+          <div className="space-y-4">
+            {myRatings.length === 0 ? (
+              <p className="text-gray-500">You haven’t rated anyone yet.</p>
+            ) : (
+              myRatings.map((rating) => (
+                <ReviewCard key={rating.id} review={rating} onReply={handleReply} />
+              ))
+            )}
+          </div>
         )}
 
         {activeTab === 'reviews' && user.is_business && (
-          incomingReviews.length === 0 ? (
-            <p className="text-center text-gray-500">No reviews yet.</p>
-          ) : (
-            <div className="space-y-6">
-              {incomingReviews.map(r => (
-                <div key={r.id} className="space-y-2">
-                  <ReviewCard review={r} />
-                  <button
-                    onClick={() => handleReply(r.author_id)}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    Reply to {r.author}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )
+          <div className="space-y-4">
+            {incomingReviews.length === 0 ? (
+              <p className="text-gray-500">No reviews for your business yet.</p>
+            ) : (
+              incomingReviews.map((rev) => (
+                <ReviewCard key={rev.id} review={rev} onReply={handleReply} />
+              ))
+            )}
+          </div>
         )}
       </div>
     </div>

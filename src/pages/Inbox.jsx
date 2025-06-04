@@ -5,8 +5,9 @@ import {
   fetchThreads,
   fetchThread,
   fetchPublicProfile,
-  sendMessage,
-  searchUsers,
+  editMessage,
+  deleteMessage,
+  reportMessage,
 } from '../requests';
 import { createWebSocket } from '../utils/websocket';
 import NewMessageModal from '../components/NewMessageModal';
@@ -16,9 +17,22 @@ import {
   isToday,
   isYesterday,
 } from 'date-fns';
-import { Search, Plus, ArrowLeft } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  ArrowLeft,
+  Edit2,
+  Trash2,
+  Check,
+  X,
+  Flag,
+  MessageCircle,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+/**
+ * Group an array of messages into “Today” / “Yesterday” / date string.
+ */
 function groupByDate(messages) {
   return messages.reduce((acc, m) => {
     const d = parseISO(m.sent_at);
@@ -40,9 +54,10 @@ export default function Inbox({ setSidebarMinimized }) {
   const { user: currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const autoOpenId = searchParams.get('to');
+  const autoOpenUserId = searchParams.get('to');
+  const autoConvoId = searchParams.get('conversation');
 
-  // Threads & messages state
+  // ─ Threads & messages state
   const [threads, setThreads] = useState([]);
   const [filteredThreads, setFilteredThreads] = useState([]);
   const [activeThread, setActiveThread] = useState(null);
@@ -50,27 +65,30 @@ export default function Inbox({ setSidebarMinimized }) {
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  // Typing indicator
+  // ─ Typing indicator
   const [isTyping, setIsTyping] = useState(false);
   const [hasSentTypingTrue, setHasSentTypingTrue] = useState(false);
 
-  // “Contacts Pane” toggle on mobile (<768px)
+  // ─ “Contacts Pane” toggle on mobile (<768px)
   const [showContacts, setShowContacts] = useState(true);
 
-  // Composer
+  // ─ Composer
   const [content, setContent] = useState('');
 
-  // “New Message” modal
+  // ─ “New Message” modal
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
 
-  // Search inside contacts
+  // ─ Search inside threads
   const [searchThreads, setSearchThreads] = useState('');
-  const [searchQueryResults, setSearchQueryResults] = useState([]);
-  const [searchResultsLoading, setSearchResultsLoading] = useState(false);
+
+  // ─ Edit mode state
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
 
   // ─── 1️⃣ Fetch threads initially ─────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+
     async function loadThreads() {
       setLoadingThreads(true);
       setSidebarMinimized(true);
@@ -80,14 +98,28 @@ export default function Inbox({ setSidebarMinimized }) {
         setThreads(list);
         setFilteredThreads(list);
 
-        // If URL has ?to=USER_ID, auto‐open that thread
-        if (autoOpenId) {
+        // If URL has ?conversation=ID, auto‐open that marketplace thread
+        if (autoConvoId) {
+          const t = list.find(
+            (t) =>
+              t.type === 'marketplace' &&
+              String(t.conversation_id) === String(autoConvoId)
+          );
+          if (t) {
+            setActiveThread(t);
+            setShowContacts(false);
+            return;
+          }
+        }
+
+        // Else if URL has ?to=USER_ID, auto‐open direct DM
+        if (autoOpenUserId) {
           let t = list.find(
-            (t) => t.type === 'direct' && String(t.user.id) === autoOpenId
+            (t) => t.type === 'direct' && String(t.user.id) === String(autoOpenUserId)
           );
           if (!t) {
             // create a stub if no existing thread
-            const u = await fetchPublicProfile(autoOpenId);
+            const u = await fetchPublicProfile(autoOpenUserId);
             t = {
               type: 'direct',
               user: u,
@@ -100,21 +132,29 @@ export default function Inbox({ setSidebarMinimized }) {
           setShowContacts(false);
         }
       } catch {
-        // ignore
+        // ignore errors
       } finally {
         if (!cancelled) setLoadingThreads(false);
       }
     }
+
     loadThreads();
     return () => {
       cancelled = true;
     };
-  }, [autoOpenId, setSidebarMinimized]);
+  }, [autoOpenUserId, autoConvoId, setSidebarMinimized]);
 
   // ─── 2️⃣ Filter “threads” list as user types ───────────────────────────────
   useEffect(() => {
     const filtered = threads.filter((t) => {
-      const name = t.type === 'group' ? t.group.name : t.user.username;
+      let name;
+      if (t.type === 'direct') {
+        name = t.user.username;
+      } else if (t.type === 'marketplace') {
+        name = t.item_title;
+      } else {
+        name = t.group.name;
+      }
       return name.toLowerCase().includes(searchThreads.toLowerCase());
     });
     setFilteredThreads(filtered);
@@ -123,22 +163,35 @@ export default function Inbox({ setSidebarMinimized }) {
   // ─── 3️⃣ Fetch messages + connect WebSocket on thread select ─────────────
   useEffect(() => {
     if (!activeThread) return;
-
     let cancelled = false;
     setLoadingMessages(true);
 
     async function loadMessagesAndConnect() {
       try {
+        // ── Direct DM ──
         if (activeThread.type === 'direct') {
-          const m = await fetchThread(activeThread.user.id);
-          if (!cancelled) setMessages(m);
+          const raw = await fetchThread(activeThread.user.id);
+          const mapped = raw.map((msg) => ({
+            id: msg.id,
+            content: msg.content,
+            sender_id: msg.sender_id,
+            edited_at: msg.edited_at,
+            is_deleted: msg.is_deleted,
+            sent_at: msg.sent_at,
+            is_own: String(msg.sender_id) === String(currentUser.id),
+            isModerator: msg.is_moderator_message,  // new flag
+            subject: msg.subject || '',
+          }));
+          if (!cancelled) setMessages(mapped);
+          setContent(''); // Clear prefill for direct
 
-          // Close prior socket if any
-          if (wsRef.current) wsRef.current.close();
-
-          // Open new WebSocket
+          if (wsRef.current) {
+            wsRef.current.close();
+          }
           const token = localStorage.getItem('accessToken');
-          const sortedIds = [currentUser.id, activeThread.user.id].sort((a, b) => a - b);
+          const sortedIds = [currentUser.id, activeThread.user.id]
+            .map((id) => String(id))
+            .sort((a, b) => (a < b ? -1 : 1));
           const chatKey = `${sortedIds[0]}_${sortedIds[1]}`;
           const socket = createWebSocket(`/ws/chat/${chatKey}/`, token);
           wsRef.current = socket;
@@ -146,36 +199,150 @@ export default function Inbox({ setSidebarMinimized }) {
           socket.onmessage = (e) => {
             const data = JSON.parse(e.data);
             if (data.message) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  content: data.message,
-                  is_own: data.sender_id === currentUser.id,
-                  sent_at: data.sent_at || new Date().toISOString(),
-                },
-              ]);
+              const incoming = {
+                id: data.id,
+                content: data.message,
+                sender_id: data.sender_id,
+                edited_at: data.edited_at || null,
+                is_deleted: data.is_deleted || false,
+                sent_at: data.sent_at || new Date().toISOString(),
+                is_own: String(data.sender_id) === String(currentUser.id),
+                isModerator: data.is_moderator_message || false,
+                subject: data.subject || '',
+              };
+              setMessages((prev) => {
+                if (incoming.is_own) {
+                  return prev.map((m) =>
+                    m.is_own && String(m.id).startsWith('temp-') ? incoming : m
+                  );
+                } else {
+                  return [...prev, incoming];
+                }
+              });
             } else if (
               typeof data.typing === 'boolean' &&
-              data.sender_id === activeThread.user.id
+              String(data.sender_id) === String(activeThread.user.id)
             ) {
               setIsTyping(data.typing);
+            } else if (data.type === 'edit_message') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  String(m.id) === String(data.message_id)
+                    ? { ...m, content: data.new_content, edited_at: data.edited_at }
+                    : m
+                )
+              );
+            } else if (data.type === 'delete_message') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  String(m.id) === String(data.message_id)
+                    ? { ...m, is_deleted: true }
+                    : m
+                )
+              );
             }
           };
+          socket.onclose = () => {};
+          socket.onerror = (err) => console.error('WebSocket error:', err);
+        }
 
-          socket.onclose = () => {
-            /* no-op */
+        // ── Marketplace thread ──
+        else if (activeThread.type === 'marketplace') {
+          const raw = await fetchThread(activeThread.other_user.id, {
+            conversation: activeThread.conversation_id,
+          });
+          const mapped = raw.map((msg) => ({
+            id: msg.id,
+            content: msg.content,
+            sender_id: msg.sender_id,
+            edited_at: msg.edited_at,
+            is_deleted: msg.is_deleted,
+            sent_at: msg.sent_at,
+            is_own: String(msg.sender_id) === String(currentUser.id),
+            isModerator: msg.is_moderator_message,
+            subject: msg.subject || '',
+          }));
+          if (!cancelled) setMessages(mapped);
+
+          // Prefill initial message if first load and no messages
+          if (mapped.length === 0) {
+            setContent('Hi, is this item still available?');
+          } else {
+            setContent('');
+          }
+
+          if (wsRef.current) {
+            wsRef.current.close();
+          }
+          const token = localStorage.getItem('accessToken');
+          const sortedIds = [currentUser.id, activeThread.other_user.id]
+            .map((id) => String(id))
+            .sort((a, b) => (a < b ? -1 : 1));
+          const chatKey = `${sortedIds[0]}_${sortedIds[1]}`;
+          const socket = createWebSocket(`/ws/chat/${chatKey}/`, token);
+          wsRef.current = socket;
+
+          socket.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.message) {
+              const incoming = {
+                id: data.id,
+                content: data.message,
+                sender_id: data.sender_id,
+                edited_at: data.edited_at || null,
+                is_deleted: data.is_deleted || false,
+                sent_at: data.sent_at || new Date().toISOString(),
+                is_own: String(data.sender_id) === String(currentUser.id),
+                isModerator: data.is_moderator_message || false,
+                subject: data.subject || '',
+              };
+              setMessages((prev) => {
+                if (incoming.is_own) {
+                  return prev.map((m) =>
+                    m.is_own && String(m.id).startsWith('temp-') ? incoming : m
+                  );
+                } else {
+                  return [...prev, incoming];
+                }
+              });
+            } else if (
+              typeof data.typing === 'boolean' &&
+              String(data.sender_id) === String(activeThread.other_user.id)
+            ) {
+              setIsTyping(data.typing);
+            } else if (data.type === 'edit_message') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  String(m.id) === String(data.message_id)
+                    ? { ...m, content: data.new_content, edited_at: data.edited_at }
+                    : m
+                )
+              );
+            } else if (data.type === 'delete_message') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  String(m.id) === String(data.message_id)
+                    ? { ...m, is_deleted: true }
+                    : m
+                )
+              );
+            }
           };
-          socket.onerror = (err) => {
-            console.error('WebSocket error:', err);
-          };
-        } else {
-          // If group‐chat type, navigate away
+          socket.onclose = () => {};
+          socket.onerror = (err) => console.error('WebSocket error:', err);
+        }
+
+        // ── Group chat → redirect to group-chat page ──
+        else {
           navigate(`/group-chat/${activeThread.group.id}`);
         }
 
-        // Scroll to bottom after loading
+        // Small delay then scroll to bottom
         setTimeout(() => {
-          inboxMessagesRef.current?.scrollTo(0, inboxMessagesRef.current.scrollHeight);
+          inboxMessagesRef.current?.scrollTo(
+            0,
+            inboxMessagesRef.current.scrollHeight
+          );
         }, 50);
       } catch {
         // ignore
@@ -191,33 +358,41 @@ export default function Inbox({ setSidebarMinimized }) {
     };
   }, [activeThread, navigate, currentUser]);
 
-  // ─── 4️⃣ Send a message (optimistic + WebSocket + API) ────────────────────
-  const handleSend = async () => {
-    if (!content.trim() || !activeThread?.user?.id) return;
-    const temp = {
-      content,
-      is_own: true,
-      sent_at: new Date().toISOString(),
-    };
-    setMessages((ms) => [...ms, temp]);
-    setContent('');
+  // ─── 4️⃣ Always scroll to bottom whenever messages (or typing) change ─────
+  useEffect(() => {
+    if (inboxMessagesRef.current) {
+      inboxMessagesRef.current.scrollTo(
+        0,
+        inboxMessagesRef.current.scrollHeight
+      );
+    }
+  }, [messages, isTyping]);
 
-    // Send via WS if open
+  // ─── 5️⃣ Send a message (optimistic + WebSocket) ──────────────────────────
+  const handleSend = () => {
+    if (!content.trim() || !activeThread) return;
+
+    // Create a temporary message so UI feels snappy
+    const tempMsg = {
+      id: `temp-${Date.now()}`,
+      content,
+      sender_id: currentUser.id,
+      edited_at: null,
+      is_deleted: false,
+      sent_at: new Date().toISOString(),
+      is_own: true,
+      isModerator: false,
+      subject: '',
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ message: content }));
     }
-    // Scroll down
-    inboxMessagesRef.current?.scrollTo(0, inboxMessagesRef.current.scrollHeight);
-
-    // Fire & forget to server
-   // try {
-     // await sendMessage(activeThread.user.id, content);
-   // } catch {
-      // ignore
-    //}
+    setContent('');
   };
 
-  // ─── 5️⃣ Typing indicator ─────────────────────────────────────────────────
+  // ─── 6️⃣ Typing indicator ─────────────────────────────────────────────────
   const handleTyping = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       if (!hasSentTypingTrue) {
@@ -232,25 +407,87 @@ export default function Inbox({ setSidebarMinimized }) {
       }
       setIsTyping(false);
       setHasSentTypingTrue(false);
-    }, 5000);
+    }, 2000);
+  };
+
+  // ─── 7️⃣ Handle Edit / Delete / Report ──────────────────────────────────
+  const startEditing = (msg) => {
+    if (!msg.is_own || msg.is_deleted) return;
+    setEditingMessageId(msg.id);
+    setEditingContent(msg.content);
+  };
+
+  const cancelEditing = () => {
+    setEditingMessageId(null);
+    setEditingContent('');
+  };
+
+  const saveEdit = async (msgId) => {
+    const original = messages.find((m) => String(m.id) === String(msgId));
+    if (!original) {
+      cancelEditing();
+      return;
+    }
+    if (original.content.trim() === editingContent.trim() || !editingContent.trim()) {
+      cancelEditing();
+      return;
+    }
+
+    // Optimistic update
+    setMessages((prev) =>
+      prev.map((m) =>
+        String(m.id) === String(msgId)
+          ? { ...m, content: editingContent, edited_at: new Date().toISOString() }
+          : m
+      )
+    );
+    setEditingMessageId(null);
+    setEditingContent('');
+
+    try {
+      await editMessage(msgId, editingContent);
+    } catch {
+      console.error('Edit failed');
+    }
+  };
+
+  const handleDelete = async (msgId) => {
+    if (msgId == null) return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        String(m.id) === String(msgId) ? { ...m, is_deleted: true } : m
+      )
+    );
+    try {
+      await deleteMessage(msgId);
+    } catch {
+      console.error('Delete failed');
+    }
+  };
+
+  const handleReport = async (msgId) => {
+    if (!window.confirm('Report this message?')) return;
+    try {
+      await reportMessage(msgId);
+      alert('Message reported to moderation.');
+    } catch {
+      console.error('Report failed');
+      alert('Failed to report message.');
+    }
   };
 
   // Group messages by date
   const grouped = groupByDate(messages);
 
   return (
-    // ─── Outer “100vh minus Navbar” container ─────────────────────────────────
-    // Assume parent <main> already applies e.g. `pt-[5vh]` to leave room for Navbar,
-    // and `lg:ml-64` (or similar) to leave room for a desktop Sidebar.
-    <div className="h-[80vh] flex flex-col md:px-4 py-4">
-      {/* Inner “chat box” with padding (never touches very bottom) */}
-      <div className="max-w-6xl mx-auto flex-1 bg-gray-800 dark:bg-gray-900 rounded-xl overflow-hidden">
+    <div className="h-[80vh] flex flex-col md:px-6 py-4">
+      {/* Chat container */}
+      <div className="max-w-5xl mx-auto flex-1 bg-gray-800 dark:bg-gray-900 rounded-2xl overflow-hidden shadow-lg">
         <div className="h-full flex">
           {/* ─── Contacts Pane (Left) ────────────────────────────────────────────── */}
           <div
             className={`
-              fixed inset-y-0 left-0 z-40 w-100 md:w-[30vw]
-              
+              fixed inset-y-0 left-0 z-40 w-full md:w-[28vw]
               bg-gray-900 dark:bg-gray-800
               border-r border-gray-700
               transform transition-transform duration-300 ease-in-out
@@ -260,19 +497,20 @@ export default function Inbox({ setSidebarMinimized }) {
             `}
           >
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800 dark:bg-gray-900">
-              <h2 className="text-lg font-semibold text-gray-100">Messages</h2>
+            <div className="px-6 py-5 border-b border-gray-700 flex items-center justify-between bg-gray-800">
+              <h2 className="text-xl font-semibold text-gray-100">Messages</h2>
               {/* Back button on mobile */}
               <button
                 className="md:hidden p-2 rounded-lg hover:bg-gray-700 transition"
                 onClick={() => setShowContacts(false)}
+                type="button"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
             </div>
 
             {/* Search + “New Message” */}
-            <div className="px-6 py-4 space-y-3">
+            <div className="px-6 py-4 space-y-4">
               <div className="relative text-gray-400">
                 <Search className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5" />
                 <input
@@ -281,7 +519,7 @@ export default function Inbox({ setSidebarMinimized }) {
                   value={searchThreads}
                   onChange={(e) => setSearchThreads(e.target.value)}
                   className="
-                    w-full pl-10 pr-3 py-2
+                    w-full pl-12 pr-3 py-2
                     bg-gray-800 dark:bg-gray-700
                     border border-gray-600 dark:border-gray-600
                     rounded-lg
@@ -299,6 +537,7 @@ export default function Inbox({ setSidebarMinimized }) {
                   text-white font-semibold rounded-lg shadow-sm
                   transition
                 "
+                type="button"
               >
                 <Plus className="w-4 h-4" />
                 New Message
@@ -308,19 +547,27 @@ export default function Inbox({ setSidebarMinimized }) {
             {/* Thread List */}
             <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500 scrollbar-track-transparent">
               {loadingThreads ? (
-                <p className="px-6 py-4 text-center text-gray-400">
-                  Loading…
-                </p>
+                <p className="px-6 py-4 text-center text-gray-400">Loading…</p>
               ) : filteredThreads.length === 0 ? (
                 <p className="px-6 py-4 text-center text-gray-400">
                   No conversations
                 </p>
               ) : (
-                <ul className="px-4 space-y-2">
+                <ul className="px-2 space-y-1">
                   {filteredThreads.map((t) => {
-                    const id = t.type === 'group' ? t.group.id : t.user.id;
-                    const name =
-                      t.type === 'group' ? t.group.name : t.user.username;
+                    // Determine displayName & subtitle based on thread type
+                    let displayName, subtitle;
+                    if (t.type === 'direct') {
+                      displayName = t.user.username;
+                      subtitle = t.last_message || 'No messages yet';
+                    } else if (t.type === 'marketplace') {
+                      displayName = t.item_title;
+                      subtitle = `${t.other_user.username}: ${t.last_message || 'No messages yet'}`;
+                    } else {
+                      displayName = t.group.name;
+                      subtitle = t.last_message || 'No messages yet';
+                    }
+
                     const lastAt = t.last_message_time
                       ? formatDistanceToNow(parseISO(t.last_message_time), {
                           addSuffix: true,
@@ -329,24 +576,34 @@ export default function Inbox({ setSidebarMinimized }) {
                     const unread = t.unread_count > 0;
                     const isActive =
                       activeThread &&
-                      activeThread.type === t.type &&
-                      ((t.type === 'group' &&
-                        activeThread.group.id === id) ||
-                        (t.type === 'direct' &&
-                          activeThread.user.id === id));
+                      t.type === activeThread.type &&
+                      ((t.type === 'direct' &&
+                        activeThread.user?.id === t.user?.id) ||
+                        (t.type === 'marketplace' &&
+                          String(activeThread.conversation_id) === String(t.conversation_id)) ||
+                        (t.type === 'group' &&
+                          activeThread.group?.id === t.group?.id));
+
+                    // Unique key per thread
+                    const keyVal =
+                      t.type === 'direct'
+                        ? `direct-${t.user.id}`
+                        : t.type === 'marketplace'
+                        ? `mp-${t.conversation_id}`
+                        : `group-${t.group.id}`;
 
                     return (
                       <li
-                        key={`${t.type}-${id}`}
+                        key={keyVal}
                         onClick={() => {
                           setActiveThread(t);
                           setShowContacts(false);
                         }}
                         className={`
-                          flex items-center justify-between p-3 rounded-lg cursor-pointer
+                          flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer
                           ${
                             isActive
-                              ? 'bg-gray-700'
+                              ? 'bg-gray-700 border-l-4 border-blue-500'
                               : 'hover:bg-gray-700'
                           }
                           transition-colors
@@ -357,11 +614,7 @@ export default function Inbox({ setSidebarMinimized }) {
                             className={`
                               h-10 w-10 flex-shrink-0 rounded-full overflow-hidden
                               bg-gray-600
-                              ring-2 ${
-                                isActive
-                                  ? 'ring-blue-500'
-                                  : 'ring-transparent'
-                              }
+                              ring-2 ${isActive ? 'ring-blue-500' : 'ring-transparent'}
                               transition
                             `}
                           >
@@ -371,30 +624,30 @@ export default function Inbox({ setSidebarMinimized }) {
                                 alt={t.user.username}
                                 className="h-full w-full object-cover"
                               />
+                            ) : t.type === 'marketplace' ? (
+                              <span className="flex h-full w-full items-center justify-center text-white text-lg">
+                                🛒
+                              </span>
                             ) : (
                               <span className="flex h-full w-full items-center justify-center text-white font-bold">
-                                {name[0].toUpperCase()}
+                                {displayName[0].toUpperCase()}
                               </span>
                             )}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <p className="text-sm font-medium text-gray-100 truncate">
-                              {name}
+                            <p className="text-sm font-semibold text-gray-100 truncate">
+                              {displayName}
                             </p>
-                            <p className="text-xs text-gray-400 truncate">
-                              {t.last_message || 'No messages yet'}
-                            </p>
+                            <p className="text-xs text-gray-400 truncate">{subtitle}</p>
                           </div>
                         </div>
                         <div className="flex flex-col items-end space-y-1">
-                          <span className="text-xs text-gray-400">
-                            {lastAt}
-                          </span>
                           {unread && (
                             <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs">
                               {t.unread_count}
                             </span>
                           )}
+                          <span className="text-xs text-gray-400">{lastAt}</span>
                         </div>
                       </li>
                     );
@@ -405,17 +658,18 @@ export default function Inbox({ setSidebarMinimized }) {
           </div>
 
           {/* ─── Chat Pane (Right) ───────────────────────────────────────────────── */}
-          <div className="flex-1 flex flex-col w-80 md:w-[40vw]">
+          <div className="flex-1 flex flex-col w-full md:w-[45vw] lg:w-[50vw]">
             {/* Mobile Chat Header */}
             <div
               className={`
                 flex items-center justify-between px-6 py-4 border-b border-gray-700
-                bg-gray-900 dark:bg-gray-900 md:hidden
+                bg-gray-900 md:hidden
               `}
             >
               <button
                 onClick={() => setShowContacts(true)}
                 className="p-2 rounded-lg hover:bg-gray-700 transition"
+                type="button"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
@@ -423,6 +677,8 @@ export default function Inbox({ setSidebarMinimized }) {
                 {activeThread
                   ? activeThread.type === 'direct'
                     ? activeThread.user.username
+                    : activeThread.type === 'marketplace'
+                    ? activeThread.item_title
                     : activeThread.group.name
                   : 'Select a conversation'}
               </h3>
@@ -433,26 +689,19 @@ export default function Inbox({ setSidebarMinimized }) {
               <>
                 {/* Desktop Chat Header */}
                 <div className="hidden md:flex items-center px-8 py-5 border-b border-gray-700 bg-gray-900">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-12 w-12 rounded-full bg-gray-600 overflow-hidden">
-                      {activeThread.type === 'direct' &&
-                      activeThread.user.avatar_url ? (
-                        <img
-                          src={activeThread.user.avatar_url}
-                          alt={activeThread.user.username}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-white font-bold">
-                          {activeThread.type === 'direct'
-                            ? activeThread.user.username[0].toUpperCase()
-                            : activeThread.group.name[0].toUpperCase()}
-                        </span>
-                      )}
+                  <div className="flex items-center space-x-5">
+                    <div className="h-12 w-12 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center text-white font-bold">
+                      {activeThread.type === 'direct'
+                        ? activeThread.user.username[0].toUpperCase()
+                        : activeThread.type === 'marketplace'
+                        ? activeThread.item_title[0].toUpperCase()
+                        : activeThread.group.name[0].toUpperCase()}
                     </div>
                     <h3 className="text-2xl font-semibold text-gray-100 truncate">
                       {activeThread.type === 'direct'
                         ? activeThread.user.username
+                        : activeThread.type === 'marketplace'
+                        ? activeThread.item_title
                         : activeThread.group.name}
                     </h3>
                   </div>
@@ -461,7 +710,7 @@ export default function Inbox({ setSidebarMinimized }) {
                 {/* Message List */}
                 <div
                   ref={inboxMessagesRef}
-                  className="flex-1 overflow-y-auto px-8 py-6 space-y-4 bg-gray-800 scrollbar-thin scrollbar-thumb-blue-500 scrollbar-track-transparent"
+                  className="flex-1 overflow-y-auto px-8 py-6 space-y-6 bg-gray-800 scrollbar-thin scrollbar-thumb-blue-500 scrollbar-track-transparent"
                 >
                   {loadingMessages ? (
                     <p className="text-center text-gray-400">Loading…</p>
@@ -471,48 +720,168 @@ export default function Inbox({ setSidebarMinimized }) {
                     </p>
                   ) : (
                     Object.entries(grouped).map(([day, msgs]) => (
-                      <div key={day} className="space-y-3">
-                        <div className="sticky top-0 px-4 py-2 bg-gray-900 text-center text-xs font-medium text-gray-400 uppercase rounded-lg">
+                      <div key={day} className="space-y-4">
+                        <div className="sticky top-0 px-4 py-1 bg-gray-900 bg-opacity-75 text-center text-xs font-semibold text-gray-300 uppercase rounded">
                           {day}
                         </div>
-                        {msgs.map((m, idx) => (
-                          <div
-                            key={idx}
-                            className={`flex ${
-                              m.is_own ? 'justify-end' : 'justify-start'
-                            }`}
-                          >
+                        {msgs.map((m) => {
+                          const isOwner = Number(m.sender_id) === Number(currentUser.id);
+                          const isEditing = editingMessageId === m.id;
+                          const isDeleted = m.is_deleted;
+                          const isModerator = m.isModerator;
+
+                          return (
                             <div
+                              key={m.id}
                               className={`
-                                max-w-xs md:max-w-lg px-4 py-2 rounded-2xl shadow
-                                ${
-                                  m.is_own
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-700 text-gray-100'
-                                }
+                                flex w-full 
+                                ${isOwner ? 'justify-end' : 'justify-start'}
+                                px-4
                               `}
                             >
-                              <p className="text-sm whitespace-pre-wrap">
-                                {m.content}
-                              </p>
                               <div
-                                className={`mt-1 text-2xs ${
-                                  m.is_own
-                                    ? 'text-blue-200'
-                                    : 'text-gray-400'
-                                }`}
+                                className={`
+                                  ${isOwner ? 'ml-auto' : ''}
+                                  relative group
+                                  max-w-[70%]
+                                  ${
+                                    isModerator
+                                      ? 'bg-purple-600 text-white'
+                                      : isOwner
+                                      ? 'bg-blue-500 text-white'
+                                      : 'bg-slate-700 text-gray-100'
+                                  }
+                                  ${isDeleted ? 'opacity-50 italic' : 'opacity-100'}
+                                  px-5 py-3
+                                  transition-colors shadow-sm
+                                  ${
+                                    isModerator
+                                      ? 'rounded-lg'
+                                      : isOwner
+                                      ? 'rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl'
+                                      : 'rounded-tl-2xl rounded-tr-2xl rounded-br-2xl'
+                                  }
+                                `}
                               >
-                                {new Date(m.sent_at).toLocaleTimeString([], {
-                                  hour: 'numeric',
-                                  minute: '2-digit',
-                                })}
+                                {isDeleted ? (
+                                  <p className="text-sm">This message was deleted</p>
+                                ) : isEditing ? (
+                                  /* ─── “Edit Mode” ───────────────── */
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      value={editingContent}
+                                      onChange={(e) =>
+                                        setEditingContent(e.target.value)
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          saveEdit(m.id);
+                                        } else if (e.key === 'Escape') {
+                                          cancelEditing();
+                                        }
+                                      }}
+                                      className="
+                                        flex-1 px-3 py-1
+                                        bg-slate-600 border border-slate-500
+                                        rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400
+                                        text-gray-100
+                                      "
+                                      type="text"
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => saveEdit(m.id)}
+                                      className="p-1 text-green-400 hover:bg-slate-600 rounded transition"
+                                      type="button"
+                                    >
+                                      <Check className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={cancelEditing}
+                                      className="p-1 text-red-400 hover:bg-slate-600 rounded transition"
+                                      type="button"
+                                    >
+                                      <X className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  /* ─── Normal Display Mode ───────── */
+                                  <>
+                                    {/* Moderator message header */}
+                                    {isModerator && m.subject && (
+                                      <div className="mb-1 text-sm font-semibold">
+                                        <MessageCircle className="inline w-4 h-4 mr-1" />
+                                        {m.subject}
+                                      </div>
+                                    )}
+                                    <p className="text-sm whitespace-pre-wrap break-words">
+                                      {m.content}
+                                    </p>
+                                    <div className="mt-1 flex items-center space-x-1 text-2xs">
+                                      <span
+                                        className={
+                                          isOwner
+                                            ? 'text-blue-100'
+                                            : isModerator
+                                            ? 'text-purple-100'
+                                            : 'text-gray-400'
+                                        }
+                                      >
+                                        {new Date(m.sent_at).toLocaleTimeString(
+                                          [], { hour: 'numeric', minute: '2-digit' }
+                                        )}
+                                      </span>
+                                      {m.edited_at && (
+                                        <span className="text-gray-300">(edited)</span>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Edit/Delete icons: only for your own, not in edit mode */}
+                                {!isDeleted && !isEditing && isOwner && (
+                                  <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => startEditing(m)}
+                                      className="p-1 rounded hover:bg-slate-600 transition"
+                                      type="button"
+                                    >
+                                      <Edit2 className="w-4 h-4 text-white" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete(m.id)}
+                                      className="p-1 rounded hover:bg-slate-600 transition"
+                                      type="button"
+                                    >
+                                      <Trash2 className="w-4 h-4 text-white" />
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Report icon: only on others' messages */}
+                                {!isDeleted && !isOwner && !isModerator && (
+                                  <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => handleReport(m.id)}
+                                      className="p-1 rounded hover:bg-slate-600 transition"
+                                      type="button"
+                                    >
+                                      <Flag className="w-4 h-4 text-white" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
+
                         {isTyping && (
                           <p className="text-sm text-gray-400 px-8">
-                            {activeThread.user.username} is typing…
+                            {activeThread.type === 'direct'
+                              ? activeThread.user.username
+                              : activeThread.other_user.username}{' '}
+                            is typing…
                           </p>
                         )}
                       </div>
@@ -521,40 +890,46 @@ export default function Inbox({ setSidebarMinimized }) {
                 </div>
 
                 {/* Composer (fixed) */}
-                <div className="bg-gray-900 border-t border-gray-700 px-8 py-4 flex items-center">
-                  <input
-                    type="text"
+                <div className="bg-gray-900 border-t border-gray-700 px-8 py-4 flex items-end space-x-4">
+                  <textarea
+                    rows={1}
                     placeholder="Type your message…"
                     value={content}
                     onChange={(e) => {
                       setContent(e.target.value);
                       handleTyping();
                     }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
                     className="
-                      flex-1 px-4 py-2
+                      flex-1 px-4 py-3
                       bg-gray-800
                       border border-gray-700
-                      rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500
-                      text-gray-100
+                      rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400
+                      text-gray-100 resize-none
                     "
                   />
                   <button
                     onClick={handleSend}
                     className="
-                      ml-4 p-2 rounded-full
-                      bg-blue-600 hover:bg-blue-700
-                      text-white shadow transition
+                      p-3 rounded-full
+                      bg-blue-500 hover:bg-blue-600
+                      text-white shadow-md transition
                     "
+                    type="button"
                   >
-                    Send
+                    <Plus className="w-5 h-5" />
                   </button>
                 </div>
               </>
             ) : (
               // Placeholder if no thread selected
               <div className="flex-1 flex items-center justify-center bg-gray-800">
-                <p className="text-gray-400">Select a conversation to begin</p>
+                <p className="text-gray-400 text-lg">Select a conversation to begin</p>
               </div>
             )}
           </div>
@@ -566,6 +941,7 @@ export default function Inbox({ setSidebarMinimized }) {
         isOpen={showNewMessageModal}
         onClose={() => setShowNewMessageModal(false)}
         onUserSelect={async (user) => {
+          // If direct‐DM already exists, open it; otherwise add stub and open
           const existingThread = threads.find(
             (t) => t.type === 'direct' && t.user.id === user.id
           );
@@ -582,7 +958,7 @@ export default function Inbox({ setSidebarMinimized }) {
             setThreads((prev) => [newThread, ...prev]);
             setActiveThread(newThread);
           }
-          setShowContacts(false);
+          setShowNewMessageModal(false);
           navigate(`/inbox?to=${user.id}`);
         }}
       />

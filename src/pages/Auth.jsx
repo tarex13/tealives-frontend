@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  login,
+  login,           // This is your “login” request helper (POST /api/token/)
   register,
   fetchCities,
   fetchBusinessTypes,
-} from '../requests';           // <-- make sure you add fetchBusinessTypes
+} from '../requests';
 import { useAuth } from '../context/AuthContext';
 import { FaGoogle, FaFacebook } from 'react-icons/fa';
 import '../css/Auth.css';
@@ -19,14 +19,14 @@ export default function Auth({ isOpen, setSidebarOpen }) {
   const [formType, setFormType] = useState('login'); // login | register | forgot
   const [step, setStep] = useState(0);
 
-  // common
+  // common fields
   const [username, setUsername] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState(null);
 
-  // step-1
+  // register-step-1 fields
   const [city, setCity] = useState('');
   const [dob, setDob] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -36,7 +36,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState('');
 
-  // dynamic dropdowns
+  // dropdown data
   const [cities, setCities] = useState([]);
   const [businessTypes, setBusinessTypes] = useState([]);
 
@@ -44,7 +44,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
   const { user, loginUser } = useAuth();
   const navigate = useNavigate();
 
-  // 1️⃣ redirect if already logged in
+  // 1️⃣ If already logged in, open sidebar + redirect home
   useEffect(() => {
     if (user) {
       setSidebarOpen(true);
@@ -53,17 +53,18 @@ export default function Auth({ isOpen, setSidebarOpen }) {
     }
   }, [user]);
 
-  // 2️⃣ fetch cities & business types
+  // 2️⃣ Fetch “cities” & “business types” on mount
   useEffect(() => {
     fetchCities()
       .then(setCities)
       .catch(console.error);
+
     fetchBusinessTypes()
       .then(setBusinessTypes)
       .catch(console.error);
   }, []);
 
-  // 3️⃣ username availability
+  // 3️⃣ Username availability check
   const checkUsername = async () => {
     if (!username.trim()) return;
     try {
@@ -74,19 +75,23 @@ export default function Auth({ isOpen, setSidebarOpen }) {
     }
   };
 
-  // 4️⃣ submit handler
+  // 4️⃣ Handle “submit” for login / register / forgot
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
     try {
       if (formType === 'login') {
-        const data = await login({ username, password });
-        loginUser({ access: data.access, refresh: data.refresh, user: data.user });
-        setSidebarOpen(true);
-        navigate('/');
-      }
-      else if (formType === 'register') {
+        // Instead of passing “access” into loginUser, call loginUser({ username, password })
+        const success = await loginUser({ username, password });
+        if (success) {
+          setSidebarOpen(true);
+          navigate('/');
+        } else {
+          setError('Invalid credentials.');
+          setPassword('');
+        }
+      } else if (formType === 'register') {
         if (step === 0) {
           if (!usernameAvailable) {
             setError('Please choose an available username.');
@@ -96,7 +101,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
           return;
         }
 
-        // build payload
+        // build registration payload
         const payload = {
           username,
           email,
@@ -117,9 +122,8 @@ export default function Auth({ isOpen, setSidebarOpen }) {
         setStep(0);
         showNotification('Account created! Log in to continue.');
         navigate('/profile/edit');
-      }
-      else if (formType === 'forgot') {
-        // your reset flow
+      } else if (formType === 'forgot') {
+        // trigger password reset flow
         alert('Password reset link sent to your email.');
         setFormType('login');
       }
@@ -129,6 +133,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
     }
   };
 
+  // Progress bar for registration steps
   const renderStepProgress = () => {
     if (formType !== 'register') return null;
     return (
@@ -168,7 +173,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
           {renderStepProgress()}
           {error && <p className="text-red-600 text-sm text-center">{error}</p>}
 
-          {/* ───── LOGIN ───── */}
+          {/* ───── LOGIN FIELDS ───── */}
           {formType === 'login' && (
             <>
               <input
@@ -176,7 +181,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Username or Email"
                 className="input-style"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 required
               />
               <input
@@ -184,13 +189,13 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Password"
                 className="input-style"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </>
           )}
 
-          {/* ───── REGISTER STEP 0 ───── */}
+          {/* ───── REGISTER – STEP 0 ───── */}
           {formType === 'register' && step === 0 && (
             <>
               <input
@@ -198,7 +203,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Username"
                 className="input-style"
                 value={username}
-                onChange={e => {
+                onChange={(e) => {
                   setUsername(e.target.value);
                   setUsernameAvailable(null);
                 }}
@@ -206,9 +211,11 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 required
               />
               {username && usernameAvailable !== null && (
-                <p className={`text-sm ${
-                  usernameAvailable ? 'text-green-600' : 'text-red-600'
-                }`}>
+                <p
+                  className={`text-sm ${
+                    usernameAvailable ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
                   {usernameAvailable
                     ? '✅ Username is available'
                     : '❌ Username is taken'}
@@ -220,7 +227,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Email"
                 className="input-style"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
               <input
@@ -228,7 +235,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 placeholder="Password"
                 className="input-style"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
 
@@ -238,7 +245,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                   id="isBusiness"
                   type="checkbox"
                   checked={isBusiness}
-                  onChange={() => setIsBusiness(b => !b)}
+                  onChange={() => setIsBusiness((b) => !b)}
                   className="mr-2"
                 />
                 <label htmlFor="isBusiness" className="text-sm">
@@ -248,23 +255,29 @@ export default function Auth({ isOpen, setSidebarOpen }) {
 
               <p className="text-xs text-gray-500 text-center mt-1">
                 By signing up, you agree to our{' '}
-                <a href="/terms" className="text-blue-600 hover:underline">Terms</a> and{' '}
-                <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>.
+                <a href="/terms" className="text-blue-600 hover:underline">
+                  Terms
+                </a>{' '}
+                and{' '}
+                <a href="/privacy" className="text-blue-600 hover:underline">
+                  Privacy Policy
+                </a>
+                .
               </p>
             </>
           )}
 
-          {/* ───── REGISTER STEP 1 ───── */}
+          {/* ───── REGISTER – STEP 1 ───── */}
           {formType === 'register' && step === 1 && (
             <>
               <select
                 value={city}
-                onChange={e => setCity(e.target.value)}
+                onChange={(e) => setCity(e.target.value)}
                 className="input-style"
                 required
               >
                 <option value="">Select your city</option>
-                {cities.map(c => (
+                {cities.map((c) => (
                   <option key={c} value={c}>
                     {c.charAt(0).toUpperCase() + c.slice(1)}
                   </option>
@@ -275,7 +288,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 type="date"
                 className="input-style"
                 value={dob}
-                onChange={e => setDob(e.target.value)}
+                onChange={(e) => setDob(e.target.value)}
                 required
               />
 
@@ -295,17 +308,17 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                     placeholder="Business Name"
                     className="input-style"
                     value={businessName}
-                    onChange={e => setBusinessName(e.target.value)}
+                    onChange={(e) => setBusinessName(e.target.value)}
                     required
                   />
                   <select
                     value={businessType}
-                    onChange={e => setBusinessType(e.target.value)}
+                    onChange={(e) => setBusinessType(e.target.value)}
                     className="input-style"
                     required
                   >
                     <option value="">Select Business Type</option>
-                    {businessTypes.map(bt => (
+                    {businessTypes.map((bt) => (
                       <option key={bt} value={bt}>
                         {bt.charAt(0).toUpperCase() + bt.slice(1)}
                       </option>
@@ -316,14 +329,14 @@ export default function Auth({ isOpen, setSidebarOpen }) {
             </>
           )}
 
-          {/* ───── FORGOT ───── */}
+          {/* ───── FORGOT PASSWORD ───── */}
           {formType === 'forgot' && (
             <input
               type="email"
               placeholder="Email"
               className="input-style"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           )}
@@ -358,7 +371,10 @@ export default function Auth({ isOpen, setSidebarOpen }) {
             {formType !== 'login' && (
               <span
                 className="text-blue-600 cursor-pointer"
-                onClick={() => { setFormType('login'); setStep(0); }}
+                onClick={() => {
+                  setFormType('login');
+                  setStep(0);
+                }}
               >
                 Back to Login
               </span>
@@ -366,7 +382,10 @@ export default function Auth({ isOpen, setSidebarOpen }) {
             {formType !== 'register' && (
               <span
                 className="text-blue-600 cursor-pointer"
-                onClick={() => { setFormType('register'); setStep(0); }}
+                onClick={() => {
+                  setFormType('register');
+                  setStep(0);
+                }}
               >
                 Sign Up
               </span>
@@ -383,8 +402,14 @@ export default function Auth({ isOpen, setSidebarOpen }) {
 
           {/* ───── SOCIAL ICONS ───── */}
           <div className="flex justify-center items-center gap-4 mt-2">
-            <FaGoogle size={20} className="text-gray-700 cursor-pointer hover:text-orange-500" />
-            <FaFacebook size={20} className="text-gray-700 cursor-pointer hover:text-blue-600" />
+            <FaGoogle
+              size={20}
+              className="text-gray-700 cursor-pointer hover:text-orange-500"
+            />
+            <FaFacebook
+              size={20}
+              className="text-gray-700 cursor-pointer hover:text-blue-600"
+            />
           </div>
 
           {/* ───── GUEST BUTTON ───── */}

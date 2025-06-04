@@ -1,5 +1,5 @@
 // src/components/FeedCard.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { sendReaction } from '../requests';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -24,35 +24,62 @@ const TYPE_STYLES = {
 };
 
 export default function FeedCard({ post, refetchPostData }) {
+  // ── 1. "Hidden" state and effect ──
+  const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    // On mount, read "hiddenPosts" from localStorage
+    const raw = localStorage.getItem('hiddenPosts');
+    let hiddenArray;
+    try {
+      hiddenArray = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(hiddenArray)) {
+        hiddenArray = [];
+      }
+    } catch {
+      hiddenArray = [];
+    }
+
+    if (hiddenArray.includes(post.id)) {
+      setIsHidden(true);
+    }
+  }, [post.id]);
+
+  // ── 2. Other hooks (must run on every render) ──
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
   // Reaction state
-  const [summary, setSummary]     = useState(post.reaction_summary || {});
+  const [summary, setSummary] = useState(post.reaction_summary || {});
   const [userReacts, setUserReacts] = useState(post.user_reactions || []);
   const [loadingEmoji, setLoadingEmoji] = useState(null);
   const [showComments, setShowComments] = useState(false);
 
-  // Poll fallback
+  // ── EARLY RETURN if hidden ──
+  if (isHidden) {
+    return null;
+  }
+
+  // ── Poll fallback ──
   if (post.post_type === 'poll' && post.poll_details) {
     return <PollCardEnhanced post={post} pollData={post.poll_details} />;
   }
 
-  // Type pill styling
-  const typeLabel =
-    post.post_type.charAt(0).toUpperCase() + post.post_type.slice(1);
+  // ── Type pill styling ──
+  const typeLabel = post.post_type.charAt(0).toUpperCase() + post.post_type.slice(1);
   let pillStyle = TYPE_STYLES[post.post_type];
   if (post.post_type === 'alert') {
     const pri = (post.priority || 'low').toLowerCase();
     pillStyle = TYPE_STYLES.alert[pri] || TYPE_STYLES.alert.low;
   }
 
-  // Called when the “Edit” menu item is clicked
+  // ── Edit navigation ──
   const onEditClick = (pid) => {
     navigate(`/posts/${pid}/edit`);
   };
 
+  // ── Handle reaction click ──
   const handleReaction = async (emoji) => {
     setLoadingEmoji(emoji);
     try {
@@ -78,6 +105,7 @@ export default function FeedCard({ post, refetchPostData }) {
     }
   };
 
+  // ── RENDER ──
   return (
     <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow-sm hover:shadow-md transition-shadow mb-6 overflow-x-hidden break-words">
       {/* ────── Header ────── */}
@@ -92,7 +120,7 @@ export default function FeedCard({ post, refetchPostData }) {
               />
             ) : (
               <span className="h-full flex items-center justify-center text-gray-800 dark:text-gray-200 font-semibold">
-                {post.username?.[0]?.toUpperCase() || 'U'}
+                {post.username?.[0]?.toUpperCase() || '-.-'}
               </span>
             )}
           </div>
@@ -135,31 +163,38 @@ export default function FeedCard({ post, refetchPostData }) {
           </div>
         </div>
 
-        {/* ────── Actions (Pin, Edit, Report, etc.) ────── */}
+        {/* ────── Actions (Pin, Edit, Report, Hide) ────── */}
         <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
           {post.is_pin_active && (
             <span className="inline-flex items-center bg-yellow-100 dark:bg-yellow-800 text-yellow-600 dark:text-yellow-300 text-xs font-medium px-2 py-0.5 rounded-full">
               <Pin className="w-4 h-4 mr-1" /> Pinned
             </span>
           )}
-          {user && (
-            <PostActionMenu
-              postId={post.id}
-              postOwnerId={post.ownerId}
-              postOwnerUsername={post.username}
-              currentUserId={user.id}
-              isAnonymous={post.anonymous}
-              isPinActive={post.is_pin_active}
-              pinnedByAdmin={post.is_pinned}
-              onEditClick={onEditClick}
-            />
-          )}
+
+          <PostActionMenu
+            postId={post.id}
+            postOwnerId={post.ownerId}
+            postOwnerUsername={post.username}
+            currentUserId={user ? user.id : null}
+            isAnonymous={post.anonymous}
+            isPinActive={post.is_pin_active}
+            pinnedByAdmin={post.is_pinned}
+            onEditClick={onEditClick}
+            onHide={() => {
+              // 1) Mark this card as hidden so we un-mount it immediately:
+              setIsHidden(true);
+              // 2) Optionally ask parent to re-fetch if they need to refresh surrounding state:
+              if (typeof refetchPostData === 'function') {
+                refetchPostData();
+              }
+            }}
+          />
         </div>
       </div>
 
       {/* ────── Title + Type Pill ────── */}
       <div className="px-4 sm:px-6 pt-3 pb-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white  break-all">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white break-all">
           {post.title}
           <span
             className={`inline-block text-xs uppercase font-semibold px-2 py-0.5 rounded-full ${pillStyle}`}
@@ -172,7 +207,7 @@ export default function FeedCard({ post, refetchPostData }) {
 
       {/* ────── Content ────── */}
       <div className="px-4 sm:px-6 pb-4">
-        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words  break-all">
+        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
           {post.content}
         </p>
       </div>
@@ -220,10 +255,7 @@ export default function FeedCard({ post, refetchPostData }) {
           </button>
           {showComments && (
             <div className="mt-3">
-              <CommentSection
-                postId={post.id}
-                simpleMode={post.post_type === 'rant'}
-              />
+              <CommentSection postId={post.id} simpleMode={post.post_type === 'rant'} />
             </div>
           )}
         </div>

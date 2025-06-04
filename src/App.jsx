@@ -13,12 +13,14 @@ import CreateEvent from './pages/CreateEvent';
 import MySwapps from './pages/MySwapps';
 import Inbox from './pages/Inbox';
 import Profile from './pages/Profile';
+import Notifications from './pages/Notifications';
 import PublicProfile from './pages/PublicProfile';
 import Navbar from './components/Navbar';
 import ModPanel from './pages/ModPanel';
 import PrivateRoute from './components/PrivateRoute';
 import PageNotFound from './pages/PageNotFound';
 import SavedListings from './pages/SavedListings';
+{/* \ import editlisting from '.\pages\EditListing'; \\ if\when you create an Edit form */}
 import FeedbackForm from './components/FeedbackForm';
 import EventsPage from './pages/EventsPage';
 import TermsPage from './pages/TermsPage';
@@ -53,8 +55,20 @@ import MarketplaceItemDetail from './pages/MarketplaceItemDetail';
 import BusinessAnalytics from './pages/BusinessAnalytics';
 import AdminReportsDashboard from './pages/AdminReportsDashboard';
 import EditPostPage from './pages/EditPostPage';
-import { SpeedInsights } from "@vercel/speed-insights/react"
-
+import MyListings from './pages/MyListings';
+import SellerAnalytics from './pages/SellerAnalytics';
+import MyBadges from './pages/MyBadges';
+import TopSellerOfMonth from './pages/TopSellerOfMonth';
+import LeaderboardListings from './pages/LeaderboardListings';
+import CouponsManagement from './pages/CouponsManagement';
+import RelistReminderModal from './components/RelistReminderModal';
+import ListingConversations from './pages/ListingConversations';
+import MessageTemplates from './pages/MessageTemplates';
+import MyRatings from './pages/MyRatings';
+import PriceCompetitiveness from './components/PriceCompetitiveness';
+import BestTimeToPost from './components/BestTimeToPost';
+{/*import { SpeedInsights } from "@vercel/speed-insights/react"
+import { Analytics } from "@vercel/analytics/next"*/}
 function App() {
   const { user, loading } = useAuth();
 
@@ -146,13 +160,41 @@ function App() {
                 <Route path="/groups" element={<GroupDirectory />} />
                 <Route path="/groups/:id" element={<GroupDetailPage />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/listings/leaderboard" element={<LeaderboardListings />} />
                 <Route path="/marketplace/:id" element={<MarketplaceItemDetail />} />
+
 
                 {/* Protected Routes */}
                 <Route element={<PrivateRoute />}>
                 <Route path="/marketplace/:id/bid" element={<BidForm />} />
+                <Route path="/mylistings" element={<MyListings />} />
+                
                  <Route path="/posts/:postId/edit" element={<EditPostPage />} />
                 <Route path="/business/analytics" element={<BusinessAnalytics />} />
+                <Route path="/notifications" element={<Notifications />} />
+                                    <Route
+                      path="/top-seller-of-month"
+                      element={<TopSellerOfMonth />}
+                    />
+                    <Route
+                      path="/coupons"
+                      element={<CouponsManagement />}
+                    />
+                    <Route
+                      path="/listing/:id/conversations"
+                      element={<ListingConversations />}
+                    />
+                    <Route
+                      path="/message-templates"
+                      element={<MessageTemplates />}
+                    />
+                    <Route
+                      path="/my-ratings/:userId"
+                      element={<MyRatings />}
+                    />
+                    {/* ─── Analytics Widgets (Embed in pages where needed) ─────── */}
+                    <Route path="/price-competitiveness/:id" element={<PriceCompetitiveness />} />
+                    <Route path="/best-time-to-post" element={<BestTimeToPost />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/edit" element={<EditProfile />} />
                   <Route path="/inbox" element={<Inbox setSidebarMinimized={setSidebarMinimized}/>} />
@@ -160,6 +202,7 @@ function App() {
                   <Route path="/my-swapps" element={<MySwapps />} />
                   <Route path="/events/create" element={<CreateEvent />} />
                   <Route path="/marketplace/create" element={<CreateListing />} />
+                  <Route path="/marketplace/:id/edit" element={<CreateListing isEdit={true} />} />
                   <Route path="/mod/dashboard" element={<ModDashboard />} />
                   <Route path="/mod" element={<ModPanel />} />
                   <Route path="/mod/feedback" element={<AdminFeedback />} />
@@ -186,6 +229,8 @@ function App() {
             </main>
           </div>
         </div>
+        {/*<SpeedInsights />
+        <Analytics />*/}
         </>
       </NotificationProvider>
     </ErrorBoundary>

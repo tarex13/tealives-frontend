@@ -1,0 +1,276 @@
+// src/components/ListingActionMenu.jsx
+import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import {
+  toggleSaveListing,
+  deleteListing,
+  relistListing,
+  getOrCreateConversation,
+} from '../requests';
+import ReportModal from './ReportModal';
+import ReportListModal from './ReportListModal'; // new
+import MarkSoldModal from './MarkSoldModal';
+
+import { useNotification } from '../context/NotificationContext';
+export default function ListingActionMenu({
+  item,
+  onEdited,
+  onDeleted,
+  onSold,
+  onRelisted,
+  onHide,
+}) {
+  const { id, seller, status, is_saved } = item;
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isOwner = user?.id === seller.id;
+  const canModerate = user?.is_admin || user?.is_moderator;
+
+  const [open, setOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportListOpen, setReportListOpen] = useState(false); // new
+  const [markSoldOpen, setMarkSoldOpen] = useState(false);
+  
+  const { showNotification } = useNotification();
+  const menuRef = useRef();
+
+  onRelisted=() => {
+      showNotification('Item Relisted!', 'success');}
+
+  // Close dropdown if clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Owner actions
+  const handleEdit = (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    navigate(`/marketplace/${id}/edit`);
+    if (onEdited) onEdited();
+  };
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    if (!window.confirm('Delete this listing?')) return;
+    try {
+      await deleteListing(id);
+      if (onDeleted) onDeleted();
+    } catch {
+      alert('Failed to delete listing.');
+    }
+  };
+
+  const handleMarkSoldClick = (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    setMarkSoldOpen(true);
+  };
+
+  const handleRelist = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    try {
+      await relistListing(id);
+      if (onRelisted) onRelisted();
+    } catch {
+      alert('Failed to relist.');
+    }
+  };
+
+  // Non‐owner actions
+  const handleMessageSeller = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    if (!user) {
+      navigate('/user/auth/');
+      return;
+    }
+    try {
+      const res = await getOrCreateConversation(id);
+      const convoId = res.conversation_id;
+      navigate(`/inbox?conversation=${convoId}`);
+    } catch {
+      alert('Could not open chat.');
+    }
+  };
+
+  const handleSaveToggle = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    if (!user) {
+      navigate('/user/auth/');
+      return;
+    }
+    try {
+      await toggleSaveListing(id);
+      // Optionally refresh parent state
+    } catch {
+      alert('Failed to toggle save.');
+    }
+  };
+
+  const handleReport = (e) => {
+    e.stopPropagation();
+    setReportOpen(true);
+  };
+
+  const handleHide = (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    if (onHide) onHide(id);
+  };
+
+  return (
+    <div className="relative inline-block text-left" ref={menuRef}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full focus:outline-none"
+        title="Actions"
+      >
+        ⋯
+      </button>
+
+      {open && (
+        <div className="origin-top-right absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
+          <div className="py-1 text-sm text-gray-900 dark:text-gray-100">
+            {/* Owner actions */}
+            {isOwner ? (
+              <>
+                {status === 'available' && (
+                  <button
+                    onClick={handleEdit}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    ✏️ Edit Listing
+                  </button>
+                )}
+
+                <button
+                  onClick={handleDelete}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                >
+                  🗑️ Delete Listing
+                </button>
+
+                {status === 'available' && (
+                  <button
+                    onClick={handleMarkSoldClick}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    ✅ Mark as Sold
+                  </button>
+                )}
+
+                {status === 'sold' && (
+                  <button
+                    onClick={handleRelist}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    🔄 Relist Item
+                  </button>
+                )}
+              </>
+            ) : (
+              // Non‐owner actions
+              <>
+                {user && (
+                  <button
+                    onClick={handleMessageSeller}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    💬 Message Seller
+                  </button>
+                )}
+
+                <button
+                  onClick={handleSaveToggle}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  {is_saved ? '💔 Unsave Listing' : '💖 Save Listing'}
+                </button>
+
+                <button
+                  onClick={handleReport}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                >
+                  🚩 Report Listing
+                </button>
+
+                <button
+                  onClick={handleHide}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  🙈 Hide Listing
+                </button>
+              </>
+            )}
+
+            {/* Moderator/Admin: “Delete Listing (Mod)” */}
+            {canModerate && (
+              <button
+                onClick={handleDelete}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+              >
+                🗑️ Delete Listing (Mod)
+              </button>
+            )}
+
+            {/* Moderator/Admin: “View Reports” */}
+            {canModerate && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setReportListOpen(true);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                📝 View Reports
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <ReportModal
+        isOpen={reportOpen}
+        contentType="listing"
+        contentId={id}
+        onClose={() => setReportOpen(false)}
+        onSuccess={() => {
+          setReportOpen(false);
+          alert('Listing reported. Thank you.');
+        }}
+      />
+
+      <ReportListModal
+        isOpen={reportListOpen}
+        contentType="listing"
+        contentId={id}
+        onClose={() => setReportListOpen(false)}
+      />
+
+      {markSoldOpen && (
+        <MarkSoldModal
+          itemId={id}
+          onClose={() => setMarkSoldOpen(false)}
+          onSoldComplete={(buyerUsername) => {
+            setMarkSoldOpen(false);
+            if (onSold) onSold();
+          }}
+        />
+      )}
+    </div>
+  );
+}

@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { handlePin, deletePost } from '../requests';
 import ReportModal from './ReportModal';
+import ReportListModal from './ReportListModal';
 import { useNotification } from '../context/NotificationContext';
 
 export default function PostActionMenu({
@@ -15,10 +16,12 @@ export default function PostActionMenu({
   pinnedByAdmin,
   onEditClick,   // callback(postId) ⇒ void, provided by parent
   onDeleted,     // callback() ⇒ void, provided by parent
+  onHide,        // callback() ⇒ void, provided by parent
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef();
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportListOpen, setReportListOpen] = useState(false);
   const { user } = useAuth();
   const isLoggedIn = Boolean(user);
   const isOwner = postOwnerId && currentUserId && postOwnerId === currentUserId;
@@ -31,6 +34,36 @@ export default function PostActionMenu({
   );
   const [globalPinned, setGlobalPinned] = useState(Boolean(pinnedByAdmin));
   const active = personalPinned || globalPinned;
+
+  // ── Hide post (frontend-only via localStorage) ──
+  const handleHide = () => {
+    setOpen(false);
+
+    // 1. Get existing hidden IDs from localStorage (or an empty array)
+    const raw = localStorage.getItem('hiddenPosts');
+    let hiddenArray;
+    try {
+      hiddenArray = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(hiddenArray)) {
+        hiddenArray = [];
+      }
+    } catch {
+      hiddenArray = [];
+    }
+
+    // 2. If postId is not already hidden, add it
+    if (!hiddenArray.includes(postId)) {
+      hiddenArray.push(postId);
+      localStorage.setItem('hiddenPosts', JSON.stringify(hiddenArray));
+    }
+
+    // 3. Notify parent component so it can un-mount immediately
+    if (onHide) {
+      onHide();
+    }
+
+    showNotification('Post hidden.', 'success');
+  };
 
   useEffect(() => {
     setPersonalPinned(Boolean(isPinActive && !pinnedByAdmin));
@@ -97,7 +130,7 @@ export default function PostActionMenu({
     'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600';
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="" ref={menuRef}>
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -165,7 +198,7 @@ export default function PostActionMenu({
               </button>
             )}
 
-            {!isAnonymous && (
+            {(!isAnonymous || canModerate) && (
               <button
                 onClick={() =>
                   handleNavigation(`/profile/${postOwnerUsername}`)
@@ -213,8 +246,28 @@ export default function PostActionMenu({
               </button>
             )}
 
+            {canModerate && (
+              <>
+                <button
+                  onClick={handleDelete}
+                  className={`${menuItemClass} text-red-500`}
+                >
+                  🗑️ Delete Post (Mod)
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setReportListOpen(true);
+                  }}
+                  className={menuItemClass}
+                >
+                  📝 View Reports
+                </button>
+              </>
+            )}
+
             <button
-              onClick={() => console.log('Hide Post')}
+              onClick={handleHide}
               className={menuItemClass}
             >
               🙈 Hide Post
@@ -235,6 +288,13 @@ export default function PostActionMenu({
             'success'
           );
         }}
+      />
+
+      <ReportListModal
+        isOpen={reportListOpen}
+        contentType="post"
+        contentId={postId}
+        onClose={() => setReportListOpen(false)}
       />
     </div>
   );

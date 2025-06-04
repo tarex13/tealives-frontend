@@ -13,7 +13,7 @@ export const login = async (credentials) => {
 
 // 🌆 Fetch all supported city codes
 export const fetchCities = async () => {
-  const res = await api.get('user/cities/');
+  const res = await api.get('cities/');
   return res.data;
 };
 
@@ -43,13 +43,19 @@ export const register = async (payload) => {
 
 // 📬 Messaging
 export const fetchThreads = async () => {
+  // Now this hits the combined endpoint
   const res = await api.get('messages/threads/');
-  return res.data.map(t => ({ ...t, type: t.type || 'direct' }));
+  // Each thread object includes `.type`: 'direct' or 'marketplace'
+  return res.data;
 };
-
-export const fetchThread = (userId) =>
-  api.get(`messages/thread/${userId}/`).then(res => res.data);
-
+export const fetchThread = (userId, opts = {}) => {
+  // opts may include { conversation: <conversation_id> }
+  const params = {};
+  if (opts.conversation) {
+    params.conversation = opts.conversation;
+  }
+  return api.get(`messages/thread/${userId}/`, { params }).then(res => res.data);
+};
 export const searchUsers = (query) =>
   api.get(`/users/search/`, { params: { q: query } }).then(res => res.data);
 
@@ -86,10 +92,15 @@ export const fetchMarketplace = async (city, filters = {}, isFeed = false, url =
     throw new Error("Filters should be an object, not a string.");
   }
 
+
+
   const params = new URLSearchParams({
     ...filters,
     city,
   });
+
+  if (filters.category) params.category  = filters.category;
+  if (filters.tags)     params.tags      = filters.tags;  
 
   if (isFeed) {
     params.set('type', 'feed');
@@ -123,9 +134,28 @@ export const sendSwappOffer = async (data) => {
 export const takeSwappAction = (id, action, extraData = {}) => {
   return api.post(`swapp/offer/${id}/action/`, { action, ...extraData });
 };
-
+/**
+ * Fetch a single listing’s detail (including similar_items & tags).
+ */
+export const fetchMarketplaceItemDetail = (itemId) => api.get(`marketplace/${itemId}/`);
 export const toggleSaveListing = (id) =>
   api.post(`marketplace/${id}/toggle-save/`);
+export const fetchSavedListings = () =>
+  api.get('marketplace/saved/');
+
+/**
+ * Relist an item that was sold/expired.
+ * POST /marketplace/{id}/relist/
+ */
+export const relistListing = (listingId) =>
+  api.post(`marketplace/${listingId}/relist/`);
+
+/**
+ * Fetch the list of all Tag objects for multi‐tag filtering.
+ * Endpoint returns: [ { id, name }, ... ]
+ */
+export const fetchTags = () => api.get('metadata/tags/');
+
 
 // 🔁 Swapp
 export const updateSwappOffer = (id, data) =>
@@ -134,6 +164,112 @@ export const createPoll = (data) =>
   api.post('polls/', data);
 export const fetchPostById = (id) =>
   api.get(`posts/${id}/`).then(res => res.data).catch(() => null);
+
+
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 1) SELLER ANALYTICS (Item 1)
+// ───────────────────────────────────────────────────────────────────────────────
+export const fetchSellerAnalytics = () =>
+  api.get('marketplace/seller-analytics/');
+
+export const fetchBestTimeToPost = () =>
+  api.get('marketplace/best-time-to-post/');
+
+export const fetchTopPerformingListings = () =>
+  api.get('marketplace/top-performing-listings/'); // optional if you choose to use it
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 2) MY LISTINGS & OWNER ACTIONS (Item 2)
+// ───────────────────────────────────────────────────────────────────────────────
+export const fetchMyListings = (params) =>
+  api.get('marketplace/my-listings/', { params });
+
+export const bulkUpdateListings = (payload) =>
+  api.post('marketplace/my-listings/bulk-update/', payload);
+
+export const pauseResumeListing = (listingId, action) =>
+  api.patch(`marketplace/${listingId}/pause-resume/`, { action });
+
+export const deleteListing = (listingId) =>
+  api.delete(`marketplace/${listingId}/delete/`);
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 3) RELIST REMINDERS (Item 7)
+// ───────────────────────────────────────────────────────────────────────────────
+export const setRelistReminder = (itemId, days) =>
+  api.post(`marketplace/${itemId}/set-relist-reminder/`, { days });
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 4) LISTING COUPONS & FEATURED (Item 4)
+// ───────────────────────────────────────────────────────────────────────────────
+export const listCoupons = () =>
+  api.get('listing-coupons/');
+
+export const createCoupon = (data) =>
+  api.post('listing-coupons/', data);
+
+export const updateCoupon = (couponId, data) =>
+  api.put(`listing-coupons/${couponId}/`, data);
+
+export const deleteCouponById = (couponId) =>
+  api.delete(`listing-coupons/${couponId}/`);
+
+export const toggleFeatured = (listingId) =>
+  api.post(`marketplace/${listingId}/toggle-featured/`);
+
+// ➤ UPDATE an existing listing (edit)
+//    PATCH /marketplace/{listingId}/edit/  (uses multipart/form-data)
+export const updateListing = async (listingId, data, onProgress) => {
+  return api.patch(`marketplace/${listingId}/edit/`, data, {
+    onUploadProgress: onProgress,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+// ➤ FETCH a single listing’s detail (so you can prefill the “edit” form)
+//    GET /marketplace/{listingId}/
+export const fetchListingDetail = (listingId) =>
+  api.get(`marketplace/${listingId}/`).then((res) => res.data);
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 5) BADGES & LEADERBOARD (Item 3)
+// ───────────────────────────────────────────────────────────────────────────────
+export const fetchMyBadges = () =>
+  api.get('user/badges/');
+
+export const fetchLeaderboardListings = (params) =>
+  api.get('marketplace/leaderboard/', { params });
+
+export const fetchTopSellerMonth = () =>
+  api.get('marketplace/top-seller-month/');
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 6) MESSAGE TEMPLATES & CONVERSATIONS (Item 5)
+// ───────────────────────────────────────────────────────────────────────────────
+export const listMessageTemplates = () =>
+  api.get('message-templates/');
+
+export const createMessageTemplate = (data) =>
+  api.post('message-templates/', data);
+
+export const updateMessageTemplate = (templateId, data) =>
+  api.put(`message-templates/${templateId}/`, data);
+
+export const deleteMessageTemplate = (templateId) =>
+  api.delete(`message-templates/${templateId}/`);
+
+
+export const fetchListingConversations = (itemId) =>
+  api.get(`marketplace/${itemId}/conversations/`);
+
+/**
+ * Bulk‐mark multiple notifications as read.
+ * POST /notifications/mark-read/  with { ids: [ … ] }
+ */
+export const markNotificationsRead = (ids) =>
+  api.patch('notifications/mark-read/', { ids });
 
 // 🔔 Notifications
 export const fetchNotifications = () =>
@@ -151,6 +287,101 @@ export const fetchReports = () =>
   api.get('reports/').then(res => res.data);
 export const handleReport = (id, action) =>
   api.patch(`report/${id}/`, { action });
+
+// ─── NEW: fetch reports for a particular piece of content ─────────────────────
+//   e.g. to list all “post” reports where content_id = 123
+export const fetchReportsByContent = (contentType, contentId) =>
+  api
+    .get('reports/', {
+      params: {
+        content_type: contentType,
+        content_id: contentId,
+      },
+    })
+    .then(res => res.data);
+
+// 2. Fetch summary metrics for the dashboard
+export async function fetchReportMetrics() {
+  const res = await api.get('/reports/metrics/');
+  return res.data;
+}
+
+// 4. Assign a report to a moderator
+export async function assignReport(reportId, moderatorId) {
+  const res = await api.post(`/reports/${reportId}/assign/`, {
+    moderator_id: moderatorId,
+  });
+  return res.data;
+}
+export async function actionReport(reportId, actionType) {
+  const res = await api.patch(`/reports/${reportId}/`, { action: actionType });
+  return res.data;
+}
+
+// 6. Send a mod‐to‐user message tied to a report
+export async function sendModMessage(reportId, subject, content) {
+  const res = await api.post(`/reports/${reportId}/message/`, { subject, content });
+  return res.data; // returns the created Message object
+}
+// 7. Fetch conversation (mod messages + user replies) for a report
+export async function fetchReportMessages(reportId) {
+  const res = await api.get(`/reports/${reportId}/messages/`);
+  return res.data; // array of message objects
+}
+/**
+ * REPORT A MESSAGE (chat)
+ *
+ * POST /api/report/create/
+ * {
+ *   content_type: "message",
+ *   content_id: <messageId>,
+ *   reason_code: "<reason>"
+ * }
+ *
+ * The backend's ReportCreateView expects at least:
+ *  - content_type (e.g. "message")
+ *  - content_id   (the ID of the offending message)
+ *  - reason_code  (one of the Report.REASON_CODE_CHOICES, e.g. "spam", "harass", etc.)
+ *
+ * You can prompt the user for a reason, but if you want a default, you can pass "other".
+ */
+export async function reportMessage(messageId, reason = 'other') {
+  const payload = {
+    content_type: 'message',
+    content_id: messageId,
+    reason_code: reason,
+  };
+  const res = await api.post('/report/create/', payload);
+  return res.data;
+}
+
+// 8. Fetch internal notes for a report
+export async function fetchReportNotes(reportId) {
+  const res = await api.get(`/reports/${reportId}/notes/`);
+  return res.data; // array of { id, content, moderator: { username, id }, created_at }
+}
+
+// 9. Add a new internal note to a report
+export async function addReportNote(reportId, content) {
+  const res = await api.post(`/reports/${reportId}/notes/`, { content });
+  return res.data; // the newly created note object
+}
+
+// 10. Perform a bulk action on multiple reports at once
+//     `reportIds` is an array of report‐IDs, `actionType` as above
+export async function bulkActionReports(reportIds, actionType) {
+  const res = await api.post('/reports/bulk_action/', {
+    report_ids: reportIds,
+    action: actionType,
+  });
+  return res.data;
+}
+
+// 11. Optionally: fetch list of available report reasons/severity tags (if exposed by backend)
+export async function fetchReportReasons() {
+  const res = await api.get('/reports/reasons/');
+  return res.data; // array of available reasons/severity
+}
 
 // 📚 Groups
 export const getJoinRequests = (groupId) =>
@@ -275,11 +506,53 @@ export const submitBid = (data) =>
   api.post('marketplace/bids/', data);
 export const fetchBidsForItem = (itemId) =>
   api.get(`marketplace/${itemId}/bids/`).then(res => res.data);
+/**
+ * Fetch all bids for a given item.
+ */
+export const fetchBids = (itemId) =>
+  api.get(`marketplace/${itemId}/bids/`);
+
 export const takeBidAction = (bidId, action) =>
   api.post(`marketplace/bids/${bidId}/action/`, { action });
 
+
+/**
+ * Mark an item as sold to a given buyerId:
+ * POST /marketplace/{itemId}/mark-sold/  →  { status: 'marked as sold' }
+ * (body: { buyer_id: <id> })
+ */
+export const markItemSold = (itemId, buyerUsername = null) => {
+  const body = {};
+  if (buyerUsername && buyerUsername.trim().length) {
+    body.buyer_username = buyerUsername.trim();
+  }
+  return api.post(`marketplace/${itemId}/mark-sold/`, body);};
+/**
+ * Get or create a MarketplaceConversation for a given item:
+ * POST /marketplace/{itemId}/get-or-create-conversation/ → { conversation_id: <id> }
+ */
+export const getOrCreateConversation = (itemId) =>
+  api.post(`marketplace/${itemId}/get-or-create-conversation/`);
+
+/**
+ * Fetch all messages for a given conversation (direct or item):
+ * GET /messages/thread/?conversation={conversationId}
+ */
+export const fetchConversationMessages = (conversationId) =>
+  api.get(`messages/thread/?conversation=${conversationId}`);
+
+/**
+ * Send a message into a conversation (via REST fallback)—not used if using WebSocket.
+ * POST /messages/  →  { …newMessage }
+ *   body: { conversation: <id>, content: <text> }
+ */
+export const sendConversationMessage = (conversationId, content) =>
+  api.post('messages/', { conversation: conversationId, content });
+
+
+
 export const rateUser = (data) =>
-  api.post('user/rate/', data);
+  api.post('ratings/', data);
 export const fetchRatings = (userId) =>
   api.get(`/ratings/?user_id=${userId}`);
 
@@ -304,20 +577,24 @@ export const votePoll = async (pollId, selectedOptionId) => {
 export const markGroupMessagesRead = (groupId) =>
   api.post(`groups/${groupId}/read/`);
 
-export const fetchLeaderboard = (city) =>
+export const fetchLeaderboardUsers = (city) =>
   api.get(`leaderboard/?city=${city}`).then(res => res.data);
 
 export const logout = async () => {
-  const refresh = JSON.parse(localStorage.getItem('user'))?.refresh;
   try {
-    await api.post('logout/', { refresh });
+    await api.post('logout/', null, {
+      withCredentials: true,        // if using axios
+      // OR if you use fetch:
+      // credentials: 'include'
+    });
   } catch (err) {
     console.warn('Failed to logout cleanly.', err);
+  } finally {
+    // Remove any client‐side user state (e.g. accessToken)
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('hasLoggedIn');
+    localStorage.setItem('sidebarOpen', 'false');
   }
-  localStorage.removeItem('user');
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('hasLoggedIn');
-  localStorage.setItem('sidebarOpen', 'false');
 };
 
 // ─── New: Pending Alerts / Approve Alert ───
@@ -329,3 +606,42 @@ export const fetchPendingAlerts = () =>
 // Approve a specific alert (and bump its created_at on the server)
 export const approveAlert = (alertId) =>
   api.post(`posts/alerts/${alertId}/approve/`).then(res => res.data);
+
+export const editMessage = (messageId, newContent) =>
+  api.patch(`messages/${messageId}/`, { content: newContent }).then(res => res.data);
+
+export const deleteMessage = (messageId) =>
+  api.delete(`messages/${messageId}/`).then(res => res.data);
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 7) RATINGS & REVIEWS (Item 5)
+// ───────────────────────────────────────────────────────────────────────────────
+export const createRating = (data) =>
+  api.post('ratings/', data);
+
+export const fetchUserRatings = (userId, params) =>
+  api.get(`ratings/user/${userId}/`, { params });
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 8) PRICE COMPETITIVENESS & BEST TIME TO POST (Item 8)
+// ───────────────────────────────────────────────────────────────────────────────
+export const fetchPriceCompetitiveness = (itemId) =>
+  api.get(`marketplace/${itemId}/price-competitiveness/`);
+
+export const fetchHourlyViews = () =>
+  api.get('marketplace/best-time-to-post/');
+
+export const fetchUserByUsername = async (username) => {
+  const res = await api.get('/users/search/', { params: { q: username } });
+  // Find the exact match (case-insensitive):
+  const matches = res.data; // e.g. [ { id, username, profile_image_url, … }, … ]
+  const found = matches.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase()
+  );
+  if (!found) {
+    const error = new Error('User not found.');
+    error.response = { data: { error: 'User not found.' } };
+    throw error;
+  }
+  return found;
+};

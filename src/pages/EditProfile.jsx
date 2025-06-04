@@ -234,7 +234,7 @@ export default function EditProfile() {
     ) {
       try {
         await api.delete('user/account/');
-        window.location.href = '/login';
+        window.location.href = '/authn';
       } catch {
         showNotification('Failed to deactivate account.', 'error');
       }

@@ -1,153 +1,157 @@
 // src/hooks/useGroupData.js
-import { useState, useEffect, useRef, useCallback } from 'react'
-import api from '../api'                  // your axios instance
-//import * as groupApi from '../requests/group'  // includes getGroupDetail, getGroupMembers, getGroupPosts
-import {getGroupPosts, getGroupDetail, getGroupMembers} from '../requests'
-// ———————————————
-// 1️⃣ Group Detail
-// ———————————————
+import { useState, useEffect, useRef, useCallback } from 'react';
+import api from '../api';                     // your axios instance
+import { getGroupPosts, getGroupDetail, getGroupMembers } from '../requests';
+
+/**
+ * 1️⃣ Group Detail
+ */
 export function useGroupDetail(groupId) {
-  const [group, setGroup]     = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [group, setGroup]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
-    let canceled = false
-    setLoading(true)
-    setError(null)
+    let canceled = false;
+    setLoading(true);
+    setError(null);
 
     getGroupDetail(groupId)
       .then(data => {
-        if (!canceled) setGroup(data)
+        if (!canceled) setGroup(data);
       })
       .catch(err => {
-        if (!canceled) setError(err)
+        if (!canceled) setError(err);
       })
       .finally(() => {
-        if (!canceled) setLoading(false)
-      })
+        if (!canceled) setLoading(false);
+      });
 
-    return () => { canceled = true }
-  }, [groupId])
+    return () => {
+      canceled = true;
+    };
+  }, [groupId]);
 
-  return { group, setGroup, loading, error }
+  return { group, setGroup, loading, error };
 }
 
-
-// ———————————————
-// 2️⃣ Group Members
-// ———————————————
+/**
+ * 2️⃣ Group Members
+ */
 export function useGroupMembers(groupId) {
-  const [members, setMembers]             = useState([])
-  const [loadingMembers, setLoadingMembers] = useState(true)
-  const [errorMembers, setErrorMembers]     = useState(null)
+  const [members, setMembers]               = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [errorMembers, setErrorMembers]     = useState(null);
 
   useEffect(() => {
-    let canceled = false
-    setLoadingMembers(true)
-    setErrorMembers(null)
+    let canceled = false;
+    setLoadingMembers(true);
+    setErrorMembers(null);
 
     getGroupMembers(groupId)
       .then(res => {
-        if (canceled) return
-        const raw = res.data
-        const list = Array.isArray(raw?.results)
-          ? raw.results
-          : Array.isArray(raw)
-            ? raw
-            : []
-        setMembers(list)
+        if (canceled) return;
+        // getGroupMembers() returns an Axios response, so `.data` holds the actual payload
+        const raw = res.data;
+        const list =
+          Array.isArray(raw?.results) ? raw.results :
+          Array.isArray(raw) ? raw :
+          [];
+        setMembers(list);
       })
       .catch(err => {
-        if (!canceled) setErrorMembers(err)
+        if (!canceled) setErrorMembers(err);
       })
       .finally(() => {
-        if (!canceled) setLoadingMembers(false)
-      })
+        if (!canceled) setLoadingMembers(false);
+      });
 
-    return () => { canceled = true }
-  }, [groupId])
+    return () => {
+      canceled = true;
+    };
+  }, [groupId]);
 
-  return { members, setMembers, loadingMembers, errorMembers }
+  return { members, setMembers, loadingMembers, errorMembers };
 }
 
-
-// ————————————————————————
-// 3️⃣ Paginated Group Posts
-// ————————————————————————
+/**
+ * 3️⃣ Paginated Group Posts
+ */
 export function usePaginatedGroupPosts(groupId) {
-  const [posts, setPosts]               = useState([])
-  const [loadingPosts, setLoadingPosts] = useState(false)
-  const [hasMore, setHasMore]           = useState(false)
-  const [nextUrl, setNextUrl]           = useState(null)
-  const observer = useRef()
+  const [posts, setPosts]               = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [hasMore, setHasMore]           = useState(false);
+  const [nextUrl, setNextUrl]           = useState(null);
+  const observer = useRef(null);
 
-  const load = useCallback(async (url = null) => {
-    setLoadingPosts(true)
-    try {
-      let res
+  /**
+   * Load either:
+   *  • first page via getGroupPosts(groupId) → returns raw data { count, next, previous, results }
+   *  • subsequent pages via api.get(nextUrl) → returns Axios response with `.data` = raw data
+   */
+  const load = useCallback(
+    async (url = null) => {
+      setLoadingPosts(true);
+      try {
+        let res;
 
-      if (url) {
-        // subsequent pages: full URL from DRF
-        res = await api.get(url)
-      } else {
-        // first page: call our group posts endpoint
-        res = await getGroupPosts(groupId)
+        if (url) {
+          // subsequent pages come back as an Axios response
+          res = await api.get(url);
+        } else {
+          // first page: getGroupPosts returns raw JSON directly
+          res = await getGroupPosts(groupId);
+        }
+
+        // Normalize into `raw` so that both paths have .results and .next
+        const raw = res.data !== undefined ? res.data : res;
+        const results = Array.isArray(raw.results) ? raw.results : [];
+        const next = raw.next ?? null;
+
+        // Append only new posts (avoid duplicates by ID)
+        setPosts(prev => {
+          const seen = new Set(prev.map((p) => p.id));
+          return [
+            ...prev,
+            ...results.filter((p) => !seen.has(p.id)),
+          ];
+        });
+
+        setNextUrl(next);
+        setHasMore(Boolean(next));
+      } catch (err) {
+        console.error('Error loading group posts', err);
+      } finally {
+        setLoadingPosts(false);
       }
+    },
+    [groupId]
+  );
 
-      // your console.log(res) showed this shape:
-      // {
-      //   data: {
-      //     count: 1,
-      //     next: null,
-      //     previous: null,
-      //     results: [/* your post objects */]
-      //   },
-      //   status: 200,
-      //   ...
-      // }
-
-    const data = res;  // because your .then(res => res.data) returns data directly
-    const {
-    results = [],
-    next = null
-    } = data;
-
-      // append only new posts
-      setPosts(prev => {
-        const seen = new Set(prev.map(p => p.id))
-        return [
-          ...prev,
-          ...results.filter(p => !seen.has(p.id))
-        ]
-      })
-
-      setNextUrl(next)
-      setHasMore(Boolean(next))
-    } catch (err) {
-      console.error('Error loading group posts', err)
-    } finally {
-      setLoadingPosts(false)
-    }
-  }, [groupId])
-
-  // on mount or when groupId changes, reset and load first page
+  // On mount or whenever groupId changes, reset state and load the first page
   useEffect(() => {
-    setPosts([])
-    load(null)
-  }, [groupId, load])
+    setPosts([]);
+    setNextUrl(null);
+    setHasMore(false);
+    load(null);
+  }, [groupId, load]);
 
-  // intersection observer for infinite scroll
-  const sentinelRef = useCallback(node => {
-    if (loadingPosts) return
-    observer.current?.disconnect()
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
-        load(nextUrl)
-      }
-    })
-    if (node) observer.current.observe(node)
-  }, [loadingPosts, hasMore, nextUrl, load])
+  // IntersectionObserver: attach to “last post” DOM node
+  const sentinelRef = useCallback(
+    (node) => {
+      if (loadingPosts) return;
+      if (observer.current) observer.current.disconnect();
 
-  return { posts, loadingPosts, setPosts, hasMore, sentinelRef }
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          load(nextUrl);
+        }
+      });
+
+      if (node) observer.current.observe(node);
+    },
+    [loadingPosts, hasMore, nextUrl, load]
+  );
+
+  return { posts, loadingPosts, setPosts, hasMore, sentinelRef };
 }

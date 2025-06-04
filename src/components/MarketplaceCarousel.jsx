@@ -39,7 +39,7 @@ export default function MarketplaceCarousel({ media = [] }) {
       <img
         src={getImageUrl(media[current])}
         alt={`Media ${current + 1}`}
-        className="w-full h-64 object-cover rounded transition-opacity duration-300 cursor-pointer"
+        className="w-full aspect-[4/3] object-cover rounded transition-opacity duration-300 cursor-pointer"
         onClick={() => setLightboxOpen(true)}
         loading="lazy"
       />

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function GroupCard({ group, currentUser, onJoinLeave, joiningGroupId }) {
+  
   const navigate = useNavigate();
   const [isMember, setIsMember] = useState(group.is_member);
 
@@ -12,7 +13,7 @@ export default function GroupCard({ group, currentUser, onJoinLeave, joiningGrou
   const handleJoinLeave = (e) => {
     e.stopPropagation();
     onJoinLeave(isMember);
-    setIsMember(!isMember);
+    if(currentUser) setIsMember(!isMember);
   };
 
   return (

@@ -6,7 +6,7 @@ export default function AccountDelete() {
     if (confirm('Are you sure you want to deactivate your account?')) {
       await api.delete('user/account/');
       alert('Account deactivated.');
-      window.location.href = '/login';
+      window.location.href = '/auth';
     }
   };
 

@@ -1,16 +1,18 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { jwtDecode } from 'jwt-decode';
+// ─── Fix: import default, not named ───────────────────────────────────────────
+import {jwtDecode} from 'jwt-decode';
 import api from '../api';
 import { setUpdateAccessTokenCallback } from './AuthContextHelper';
 
 const AuthContext = createContext();
 let refreshTimeoutId = null;
-const BUFFER_TIME_MS = 60 * 1000;
+const BUFFER_TIME_MS = 60 * 1000; // 1 minute before expiry
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ─── fetchUserProfile: GET /user/profile/ using the access token ─────────────
   const fetchUserProfile = async (accessToken) => {
     try {
       const res = await api.get('user/profile/', {
@@ -18,27 +20,56 @@ export const AuthProvider = ({ children }) => {
       });
       return res.data;
     } catch (err) {
-      console.error('[AuthContext] Failed to fetch user profile:', err.response || err);
+      console.error(
+        '[AuthContext] Failed to fetch user profile:',
+        err.response?.data?.detail || err.message
+      );
       return null;
     }
   };
 
-  const loginUser = async ({ access }) => {
-    localStorage.setItem('accessToken', access);
-    localStorage.setItem('hasLoggedIn', 'true'); // ✅ Mark login for refresh cookie check
+  // ─── loginUser: POST credentials to /api/token-login/ to retrieve { access, refresh } ─
+  //     and set the HttpOnly refresh_token cookie automatically.
+  const loginUser = async ({ username, password }) => {
+    try {
+      // 1️⃣ POST /api/token-login/ with user credentials
+      // (NOTE: use the correct endpoint name from your urlpatterns)
+      const response = await api.post('token-login/', { username, password });
 
-    const profile = await fetchUserProfile(access);
-    if (profile) {
-      setUser(profile);
-      scheduleSilentRefresh(access);
-    } else {
-      await logoutUser({ redirect: false });
+      // response.data should be { access: "...", refresh: "..." }
+      const { access } = response.data;
+      if (!access) {
+        throw new Error('No access token returned');
+      }
+
+      // 2️⃣ Save the access token in localStorage
+      localStorage.setItem('accessToken', access);
+      localStorage.setItem('hasLoggedIn', 'true');
+
+      // 3️⃣ Fetch and set the user profile
+      const profile = await fetchUserProfile(access);
+      if (profile) {
+        setUser(profile);
+        scheduleSilentRefresh(access);
+        return true;
+      } else {
+        // If profile fetch fails, force logout
+        await logoutUser({ redirect: false });
+        return false;
+      }
+    } catch (err) {
+      // Don’t log the entire server traceback—only a short detail or message:
+      console.error(
+        '[AuthContext] loginUser error:',
+        err.response?.data?.detail || err.message
+      );
+      return false;
     }
   };
 
+  // ─── logoutUser: Clear storage, call backend logout to blacklist refresh, delete cookie ─
   const logoutUser = async ({ redirect = true } = {}) => {
     clearStoredAuth();
-    localStorage.setItem('sidebarOpen', false)
     setUser(null);
 
     if (refreshTimeoutId) {
@@ -47,9 +78,13 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      await api.post('logout/'); // Safe logout view with refresh token handling
+      // POST /logout/ (your view blacklists the refresh cookie and deletes it)
+      await api.post('logout/');
     } catch (err) {
-      console.warn('[AuthContext] Logout API failed:', err.response || err);
+      console.warn(
+        '[AuthContext] Logout API failed:',
+        err.response?.data?.detail || err.message
+      );
     }
 
     if (redirect) {
@@ -57,72 +92,89 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ─── refreshAccessToken: POST /api/token/refresh/ relies on HttpOnly cookie ─────
   const refreshAccessToken = async () => {
     try {
+      // Because api.withCredentials=true, the browser sends: Cookie: refresh_token=...
       const res = await api.post('token/refresh/');
       const { access } = res.data;
+      if (!access) throw new Error('No access returned on refresh');
+
       localStorage.setItem('accessToken', access);
 
+      // Fetch new profile (optional, but keeps “user” in sync)
       const profile = await fetchUserProfile(access);
       if (profile) {
         setUser(profile);
         scheduleSilentRefresh(access);
       } else {
-        console.warn('[AuthContext] Silent refresh: profile fetch failed.');
+        console.warn(
+          '[AuthContext] Silent refresh: profile fetch failed'
+        );
         localStorage.removeItem('accessToken');
         setUser(null);
       }
-
       return access;
-    }   catch (err) {
-      console.error('[AuthContext] Token refresh failed:', err.response || err);
+    } catch (err) {
+      console.error(
+        '[AuthContext] Token refresh failed:',
+        err.response?.data?.detail || err.message
+      );
       clearStoredAuth();
       setUser(null);
-      // Add this line:
-      clearTimeout(refreshTimeoutId);
-      refreshTimeoutId = null;
-  
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+        refreshTimeoutId = null;
+      }
       return null;
     }
   };
+
+  // ─── clearStoredAuth: remove localStorage keys ─────────────────────────────────
   const clearStoredAuth = () => {
-    ['accessToken', 'hasLoggedIn', 'user'].forEach(key =>
+    ['accessToken', 'hasLoggedIn', 'user'].forEach((key) =>
       localStorage.removeItem(key)
     );
-    localStorage.setItem('sidebarOpen', 'false')
-  };
-  const updateAccessToken = async () => {
-    await refreshAccessToken();
   };
 
+  // ─── scheduleSilentRefresh: decode access, schedule a refresh 1 minute before expiry ─
   const scheduleSilentRefresh = (accessToken) => {
     if (!accessToken) return;
 
     let decoded;
     try {
+      // ↓ Call the default export directly
       decoded = jwtDecode(accessToken);
     } catch (e) {
-      console.error('[AuthContext] Failed to decode access token.');
+      console.error('[AuthContext] Failed to decode access token.', e);
       clearStoredAuth();
       setUser(null);
       return;
     }
 
-    const expiresAt = decoded.exp * 1000;
+    const expiresAt = decoded.exp * 1000; // exp is in seconds; convert to ms
     const delay = expiresAt - Date.now() - BUFFER_TIME_MS;
 
     if (delay <= 0 || isNaN(delay)) {
-      refreshAccessToken(); // Immediate refresh if expired or invalid
+      // If expired or invalid, refresh immediately
+      refreshAccessToken();
       return;
     }
 
-    if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
-
+    if (refreshTimeoutId) {
+      clearTimeout(refreshTimeoutId);
+    }
     refreshTimeoutId = setTimeout(() => {
       refreshAccessToken();
     }, delay);
   };
 
+  // ─── updateAccessToken: exposed for manual refresh triggers ───────────────────
+  const updateAccessToken = async () => {
+    await refreshAccessToken();
+  };
+
+  // ─── on mount: try to load from localStorage or silently refresh ───────────────
   useEffect(() => {
     setUpdateAccessTokenCallback(updateAccessToken);
 
@@ -131,15 +183,17 @@ export const AuthProvider = ({ children }) => {
       const hasLoggedIn = localStorage.getItem('hasLoggedIn') === 'true';
 
       if (access) {
+        // 1) If we have an access token, check if it’s still valid by fetching profile
         const profile = await fetchUserProfile(access);
         if (profile) {
           setUser(profile);
           scheduleSilentRefresh(access);
         } else if (hasLoggedIn) {
+          // 2) Access is invalid/expired but user did log in: try refresh
           await refreshAccessToken();
         }
       } else if (hasLoggedIn) {
-        // Attempt refresh if user has logged in before
+        // We have no access token but did log in before: try refresh
         await refreshAccessToken();
       }
 
@@ -149,12 +203,16 @@ export const AuthProvider = ({ children }) => {
     tryLoad();
 
     return () => {
-      if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+      }
     };
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loginUser, logoutUser, updateAccessToken, loading }}>
+    <AuthContext.Provider
+      value={{ user, loginUser, logoutUser, updateAccessToken, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );

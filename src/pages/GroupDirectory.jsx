@@ -101,13 +101,13 @@ export default function GroupDirectory() {
           placeholder="Search groups..."
           className="p-2 border rounded w-full sm:w-64 dark:bg-gray-900"
         />
-        <select value={filter} onChange={e => setFilter(e.target.value)} className="p-2 border rounded">
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="dark:bg-gray-700 p-2 border rounded">
           <option value="all">All</option>
           <option value="public">Public</option>
           <option value="private">Private</option>
           {user && <option value="mine">My Groups</option>}
         </select>
-        <select value={sort} onChange={e => setSort(e.target.value)} className="p-2 border rounded">
+        <select value={sort} onChange={e => setSort(e.target.value)} className="dark:bg-gray-700 p-2 border rounded">
           <option value="newest">Newest</option>
           <option value="members">Most Members</option>
         </select>

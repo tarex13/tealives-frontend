@@ -14,11 +14,12 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// Preset reasons that admins can later see as “label” in the report
 const presetReasons = [
   { label: 'Spam', icon: <Flag className="w-4 h-4 text-red-500" /> },
   { label: 'Harassment', icon: <ShieldAlert className="w-4 h-4 text-red-500" /> },
   { label: 'Inappropriate Content', icon: <ThumbsDown className="w-4 h-4 text-red-500" /> },
-  { label: 'Other', icon: <HelpCircle className="w-4 h-4 text-red-500" /> }
+  { label: 'Other', icon: <HelpCircle className="w-4 h-4 text-red-500" /> },
 ];
 
 const WORD_LIMIT = 100;
@@ -26,9 +27,9 @@ const WORD_LIMIT = 100;
 export default function ReportModal({
   isOpen,
   onClose,
-  contentType,
+  contentType, // e.g. 'post' | 'listing' | 'comment' | 'message'
   contentId,
-  onSuccess
+  onSuccess,
 }) {
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
@@ -38,33 +39,33 @@ export default function ReportModal({
   const modalRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // Trimmed custom input and word count
   const trimmedReason = customReason.trim();
   const wordCount = trimmedReason.split(/\s+/).filter(Boolean).length;
   const exceedsLimit = wordCount > WORD_LIMIT;
 
+  // Close if clicking outside
   useEffect(() => {
     if (!isOpen) return;
-
     const handleMouseDown = (e) => {
       if (modalRef.current && !modalRef.current.contains(e.target)) {
-        setTimeout(() => {
-          onClose();
-        }, 0);
+        setTimeout(onClose, 0);
       }
     };
-
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [isOpen, onClose]);
 
+  // Auto‐focus textarea when open
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
+  // Cmd/Ctrl+Enter to submit
   useEffect(() => {
-    const handleKeyDown = e => {
+    const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         handleSubmit();
       }
@@ -85,22 +86,24 @@ export default function ReportModal({
       return;
     }
     if (exceedsLimit) {
-      setError(`Reason exceeds the ${WORD_LIMIT}-word limit.`);
+      setError(`Reason exceeds the ${WORD_LIMIT}‐word limit.`);
       return;
     }
 
     setLoading(true);
     setError(null);
+
     try {
+      // POST to /reports/ (ReportCreateView)
       await api.post('/report/', {
         content_type: contentType,
         content_id: contentId,
-        reason: `${selectedReason}: ${trimmedReason}`
+        reason: `${selectedReason}: ${trimmedReason}`,
       });
       setSubmitted(true);
       setSelectedReason('');
       setCustomReason('');
-      onSuccess();
+      onSuccess && onSuccess();
     } catch (err) {
       console.error(err);
       setError('Could not submit report.');
@@ -114,7 +117,7 @@ export default function ReportModal({
     setSubmitted(false);
     setSelectedReason('');
     setCustomReason('');
-    onClose();
+    onClose && onClose();
   };
 
   if (!isOpen) return null;
@@ -126,13 +129,15 @@ export default function ReportModal({
       role="dialog"
       aria-labelledby="report-modal-title"
     >
+      {/* Semi‐opaque backdrop */}
       <div className="absolute inset-0 bg-black bg-opacity-30 backdrop-blur-sm pointer-events-none" />
 
       <div
         ref={modalRef}
-        onMouseDown={e => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4 transition-transform duration-200 transform scale-100 pointer-events-auto"
       >
+        {/* Close button */}
         <button
           onClick={handleClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -142,6 +147,7 @@ export default function ReportModal({
         </button>
 
         {submitted ? (
+          // “Thank you” state
           <div className="p-6 text-center">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
               Thank you!
@@ -166,6 +172,7 @@ export default function ReportModal({
                 Report {capitalize(contentType)}
               </h2>
 
+              {/* Preset Reasons */}
               <div className="space-y-3 mb-4">
                 {presetReasons.map(({ label, icon }) => (
                   <label
@@ -188,6 +195,7 @@ export default function ReportModal({
                 ))}
               </div>
 
+              {/* Custom Explanation */}
               <div className="mt-3">
                 <label
                   htmlFor="report-custom-reason"
@@ -200,9 +208,9 @@ export default function ReportModal({
                   id="report-custom-reason"
                   rows={4}
                   className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  placeholder="Provide more context (required)..."
+                  placeholder="Provide more context (required)."
                   value={customReason}
-                  onChange={e => setCustomReason(e.target.value)}
+                  onChange={(e) => setCustomReason(e.target.value)}
                   disabled={loading}
                 />
                 <div className="text-xs text-right mt-1">
@@ -215,6 +223,7 @@ export default function ReportModal({
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             </div>
 
+            {/* Footer Buttons */}
             <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 rounded-b-lg flex justify-end space-x-2">
               <button
                 onClick={handleClose}
