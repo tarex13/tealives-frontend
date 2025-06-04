@@ -230,7 +230,8 @@ export default function ListingActionMenu({
             {/* Moderator/Admin: “View Reports” */}
             {canModerate && (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setOpen(false);
                   setReportListOpen(true);
                 }}
@@ -255,6 +256,7 @@ export default function ListingActionMenu({
       />
 
       <ReportListModal
+      
         isOpen={reportListOpen}
         contentType="listing"
         contentId={id}

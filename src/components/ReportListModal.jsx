@@ -127,7 +127,7 @@ export default function ReportListModal({
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        <strong>Reporter:</strong> {report.reported_by_username}
+                        <strong>Reporter:</strong> {report.reported_by.username}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
                         <strong>Reason:</strong> {report.reason}
@@ -138,7 +138,8 @@ export default function ReportListModal({
                     </div>
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleDismissReport(report.id)}
+                        onClick={(e) => {e.stopPropagation() 
+                          handleDismissReport(report.id) }}
                         disabled={actionLoading}
                         className="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 text-xs"
                       >

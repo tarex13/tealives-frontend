@@ -91,8 +91,8 @@ export default function MarketplaceItemDetail() {
     );
   }
 
-  const isSeller = user?.user?.id === item.seller;
-  const isBuyer = user?.user?.id === item.buyer_id;
+  const isSeller = user?.id === item.seller.id;
+  const isBuyer = user?.id === item.buyer_id;
   const sold = item.status === 'sold';
   const hasBids = item.is_bidding;
 
@@ -253,7 +253,7 @@ export default function MarketplaceItemDetail() {
             </div>
           </div>
 
-          {!sold && user && user.user?.id !== item.seller && (
+          {!sold && user && !isSeller && (
             <div>
               <button
                 onClick={handleMessageSeller}
