@@ -17,6 +17,11 @@ export const fetchCities = async () => {
   return res.data;
 };
 
+
+export async function markMessageSeen(messageId) {
+  return api.post(`/api/messages/${messageId}/mark-seen/`);
+}
+
 export const toggleFollow = userId =>
   api.post(`users/${userId}/follow/`).then(r => r.data);
 

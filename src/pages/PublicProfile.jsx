@@ -771,7 +771,6 @@ export default function Profile() {
             </div>
           </div>
           <BestTimeToPost />
-          <PriceCompetitiveness user={currentUser} />
         </div>
       )}
     </div>

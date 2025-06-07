@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchPriceCompetitiveness } from '../requests';
 import { useParams } from 'react-router-dom';
 
-export default function PriceCompetitiveness({user}) {
+export default function PriceCompetitiveness({item}) {
   const { id } = useParams(); // listing ID
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,7 @@ export default function PriceCompetitiveness({user}) {
   const loadCompetitiveness = async () => {
     setLoading(true);
     try {
-      const res = await fetchPriceCompetitiveness(user.id);
+      const res = await fetchPriceCompetitiveness(item.id);
       setData(res.data);
     } catch (err) {
       console.error('Failed to load price competitiveness:', err);

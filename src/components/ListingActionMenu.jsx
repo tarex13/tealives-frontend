@@ -8,11 +8,13 @@ import {
   relistListing,
   getOrCreateConversation,
 } from '../requests';
+
 import ReportModal from './ReportModal';
-import ReportListModal from './ReportListModal'; // new
+import ReportListModal from './ReportListModal'; // (already there)
 import MarkSoldModal from './MarkSoldModal';
 
 import { useNotification } from '../context/NotificationContext';
+
 export default function ListingActionMenu({
   item,
   onEdited,
@@ -22,21 +24,23 @@ export default function ListingActionMenu({
   onHide,
 }) {
   const { id, seller, status, is_saved } = item;
+
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isOwner = user?.id === seller.id;
+  const isOwner = user?.id === seller?.id;
   const canModerate = user?.is_admin || user?.is_moderator;
 
   const [open, setOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportListOpen, setReportListOpen] = useState(false); // new
+  const [reportListOpen, setReportListOpen] = useState(false);
   const [markSoldOpen, setMarkSoldOpen] = useState(false);
-  
+
   const { showNotification } = useNotification();
   const menuRef = useRef();
 
-  onRelisted=() => {
-      showNotification('Item Relisted!', 'success');}
+  onRelisted = () => {
+    showNotification('Item Relisted!', 'success');
+  };
 
   // Close dropdown if clicking outside
   useEffect(() => {
@@ -49,7 +53,7 @@ export default function ListingActionMenu({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Owner actions
+  // ───────── Owner Actions ────────────────────────────────────────────────
   const handleEdit = (e) => {
     e.stopPropagation();
     setOpen(false);
@@ -86,18 +90,22 @@ export default function ListingActionMenu({
     }
   };
 
-  // Non‐owner actions
+  // ───────── Non‐Owner Actions ────────────────────────────────────────────
   const handleMessageSeller = async (e) => {
     e.stopPropagation();
     setOpen(false);
+
     if (!user) {
       navigate('/user/auth/');
       return;
     }
     try {
       const res = await getOrCreateConversation(id);
-      const convoId = res.conversation_id;
-      navigate(`/inbox?conversation=${convoId}`);
+      // Now res.data contains:
+      // { conversation_id, item_id, item_title, item_price, item_status, item_thumbnail }
+      const convoId = res.data.conversation_id;
+      // Navigate into Inbox, passing both “conversation” and “to” (seller’s id).
+      navigate(`/inbox?conversation=${convoId}&to=${seller?.id}`);
     } catch {
       alert('Could not open chat.');
     }
@@ -112,7 +120,7 @@ export default function ListingActionMenu({
     }
     try {
       await toggleSaveListing(id);
-      // Optionally refresh parent state
+      // Optionally refresh parent state via onEdited/onDeleted etc.
     } catch {
       alert('Failed to toggle save.');
     }
@@ -145,7 +153,7 @@ export default function ListingActionMenu({
       {open && (
         <div className="origin-top-right absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
           <div className="py-1 text-sm text-gray-900 dark:text-gray-100">
-            {/* Owner actions */}
+            {/* Owner‐only actions */}
             {isOwner ? (
               <>
                 {status === 'available' && (
@@ -183,39 +191,48 @@ export default function ListingActionMenu({
                 )}
               </>
             ) : (
-              // Non‐owner actions
+              /* Non‐owner actions */
               <>
                 {user && (
-                  <button
-                    onClick={handleMessageSeller}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  >
-                    💬 Message Seller
-                  </button>
+                  <>
+                    <button
+                      onClick={handleMessageSeller}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      💬 Message Seller
+                    </button>
+
+                    <button
+                      onClick={handleSaveToggle}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      {is_saved ? '💔 Unsave Listing' : '💖 Save Listing'}
+                    </button>
+
+                    <button
+                      onClick={handleReport}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                    >
+                      🚩 Report Listing
+                    </button>
+                  </>
                 )}
-
-                <button
-                  onClick={handleSaveToggle}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  {is_saved ? '💔 Unsave Listing' : '💖 Save Listing'}
-                </button>
-
-                <button
-                  onClick={handleReport}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
-                >
-                  🚩 Report Listing
-                </button>
-
-                <button
-                  onClick={handleHide}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  🙈 Hide Listing
-                </button>
               </>
             )}
+
+            <button
+              onClick={handleHide}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              🙈 Hide Listing
+            </button>
+
+            <button
+              onClick={() => navigate(`/profile/${seller.username}`)}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              🙍 View Profile
+            </button>
 
             {/* Moderator/Admin: “Delete Listing (Mod)” */}
             {canModerate && (
@@ -246,7 +263,7 @@ export default function ListingActionMenu({
 
       <ReportModal
         isOpen={reportOpen}
-        contentType="listing"
+        contentType="marketplaceitem"
         contentId={id}
         onClose={() => setReportOpen(false)}
         onSuccess={() => {
@@ -256,7 +273,6 @@ export default function ListingActionMenu({
       />
 
       <ReportListModal
-      
         isOpen={reportListOpen}
         contentType="listing"
         contentId={id}
@@ -267,7 +283,7 @@ export default function ListingActionMenu({
         <MarkSoldModal
           itemId={id}
           onClose={() => setMarkSoldOpen(false)}
-          onSoldComplete={(buyerUsername) => {
+          onSoldComplete={() => {
             setMarkSoldOpen(false);
             if (onSold) onSold();
           }}

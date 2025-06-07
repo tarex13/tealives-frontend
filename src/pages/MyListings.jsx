@@ -23,6 +23,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import RelistReminderModal from '../components/RelistReminderModal';
 import MyBadges from './MyBadges';
+import PriceCompetitiveness from '../components/PriceCompetitiveness';
 
 export default function MyListings() {
   const { user } = useAuth();
@@ -690,11 +691,11 @@ export default function MyListings() {
                   Remind Me
                 </button>
               </div>)}
+      <PriceCompetitiveness item={item} />
             </div>
           ))}
         </div>
       </section>
-
       <RelistReminderModal />
     </div>
                 

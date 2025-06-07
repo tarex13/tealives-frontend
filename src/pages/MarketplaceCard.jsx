@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { toggleSaveListing } from '../requests';
+import { toggleSaveListing, getOrCreateConversation } from '../requests';
 import MarketplaceCarousel from '../components/MarketplaceCarousel';
 import ListingActionMenu from '../components/ListingActionMenu';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -43,20 +43,24 @@ export default function MarketplaceCard({ item, onHide }) {
 
   return (
     <div
-      onClick={handleCardClick}
-      className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition flex flex-col h-full overflow-hidden cursor-pointer"
+      onClick={(e) =>
+             {if (e.target === e.currentTarget) {
+        handleCardClick();
+      }}
+      }
+      className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition flex flex-col h-full overflow-hidden"
     >
       {/* ─── TOP: Carousel & Action Buttons ──────────────────────────────────── */}
       <div className="relative">
         {/* Save/Unsave Button (top-right) */}
-        <button
+       {user && <button
           onClick={handleToggleSave}
           className="absolute top-2 right-10 z-10 text-2xl"
           title={isSaved ? 'Unsave' : 'Save'}
           aria-label={isSaved ? 'Unsave listing' : 'Save listing'}
         >
           {isSaved ? '💖' : '🤍'}
-        </button>
+        </button>}
 
         {/* Listing Action Menu (three-dot) */}
         <div className="absolute top-2 right-2 z-10">
@@ -200,10 +204,31 @@ export default function MarketplaceCard({ item, onHide }) {
             e.stopPropagation();
             navigate(`/marketplace/${item.id}`);
           }}
+          type="button"
           className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition"
         >
           View Details
         </button>
+        {user && <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (!user) {
+              navigate('/user/auth/');
+              return;
+            }
+            try {
+              const res = await getOrCreateConversation(item.id);
+              const convoId = res.conversation_id;
+              navigate(`/inbox?conversation=${convoId}&to=${item.seller.id}`);
+            } catch {
+              alert('Could not open chat.');
+            }
+          }}
+          type="button"
+          className="ml-2 text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 transition"
+        >
+          Message Seller
+        </button>}
       </div>
     </div>
   );

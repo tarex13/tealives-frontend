@@ -438,7 +438,7 @@ export default function CreatePost({
       {/* Submit Button */}
       <button
         type="submit"
-        onclick={(e)=>e.preventDefault()}
+        onClick={(e)=>e.preventDefault()}
         disabled={loading}
         className="w-full py-3 font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
       >

@@ -36,6 +36,7 @@ export default function Marketplace() {
   const { user } = useAuth();
   const { city } = useCity();
 
+  // ── Filters (unchanged) ──
   const [filters, setFilters] = useState({
     category: '',
     tags: '',
@@ -45,14 +46,42 @@ export default function Marketplace() {
     sort: 'newest',
   });
 
+  // ── Fetched listings and pagination ──
   const [listings, setListings]       = useState([]);
   const [nextPage, setNextPage]       = useState(null);
   const [loading, setLoading]         = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [tagsOptions, setTagsOptions] = useState([]);
-  const [popularTags, setPopularTags] = useState([]);
 
-  // 1. Load available tag options on mount
+  // ── Tag options ──
+  const [tagsOptions, setTagsOptions]     = useState([]);
+  const [popularTags, setPopularTags]     = useState([]);
+
+  // ── NEW: Keep track of which listing IDs have been “hidden” in localStorage ──
+  const [hiddenIds, setHiddenIds] = useState(() => {
+    // On first render, try to read localStorage.getItem('hiddenListings')
+    try {
+      const raw = localStorage.getItem('hiddenListings');
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // ── Whenever `hiddenIds` changes, sync back to localStorage ──
+  useEffect(() => {
+    localStorage.setItem('hiddenListings', JSON.stringify(hiddenIds));
+  }, [hiddenIds]);
+
+  // ── Handler passed down to MarketplaceCard → ListingActionMenu. 
+  //     When invoked, it adds the given ID to `hiddenIds`. ──
+  const handleHide = (listingId) => {
+    // If it’s already hidden, do nothing
+    if (hiddenIds.includes(listingId)) return;
+    setHiddenIds((prev) => [...prev, listingId]);
+  };
+
+  // ── 1. Load tag options on mount ──
   useEffect(() => {
     const loadTags = async () => {
       try {
@@ -69,7 +98,7 @@ export default function Marketplace() {
     loadTags();
   }, []);
 
-  // 2. Fetch first page whenever city or filters change
+  // ── 2. Fetch first page whenever city or filters change ──
   const loadListings = useCallback(async () => {
     if (!city) {
       setListings([]);
@@ -85,7 +114,11 @@ export default function Marketplace() {
         : Array.isArray(payload)
         ? payload
         : [];
-      setListings(results);
+
+      // Filter out any items whose id is in hiddenIds
+      const visible = results.filter((item) => !hiddenIds.includes(item.id));
+
+      setListings(visible);
       setNextPage(payload.next ?? null);
     } catch (err) {
       console.error('Failed to load listings:', err);
@@ -94,13 +127,13 @@ export default function Marketplace() {
     } finally {
       setLoading(false);
     }
-  }, [city, filters]);
+  }, [city, filters, hiddenIds]); // add hiddenIds to dependency array
 
   useEffect(() => {
     loadListings();
   }, [loadListings]);
 
-  // 3. Load more pages
+  // ── 3. Load more pages when “Load More” is clicked ──
   const loadMore = async () => {
     if (!nextPage) return;
     setLoadingMore(true);
@@ -112,7 +145,11 @@ export default function Marketplace() {
         : Array.isArray(payload)
         ? payload
         : [];
-      setListings(prev => [...prev, ...moreResults]);
+
+      // Again, filter out any we’ve hidden
+      const visibleMore = moreResults.filter((item) => !hiddenIds.includes(item.id));
+
+      setListings((prev) => [...prev, ...visibleMore]);
       setNextPage(payload.next ?? null);
     } catch (err) {
       console.error('Failed to load more listings:', err);
@@ -121,23 +158,22 @@ export default function Marketplace() {
     }
   };
 
-  // 4. Handlers for filter inputs
+  // ── 4. Filter & tag handlers (unchanged) ──
   const handleFilterChange = (field) => (e) => {
     const value = e.target.value;
-    setFilters(prev => ({ ...prev, [field]: value }));
+    setFilters((prev) => ({ ...prev, [field]: value }));
   };
 
-  // 5. Handler for tag checkbox toggles
   const toggleTag = (tagName) => {
-    setFilters(prev => {
-      const existing = prev.tags ? prev.tags.split(',').map(t => t.trim()) : [];
+    setFilters((prev) => {
+      const existing = prev.tags ? prev.tags.split(',').map((t) => t.trim()) : [];
       let updated;
       if (existing.includes(tagName)) {
-        updated = existing.filter(t => t !== tagName);
+        updated = existing.filter((t) => t !== tagName);
       } else {
         updated = [...existing, tagName];
       }
-      return { ...prev, tags: updated.filter(t => t).join(',') };
+      return { ...prev, tags: updated.filter((t) => t).join(',') };
     });
   };
 
@@ -151,44 +187,43 @@ export default function Marketplace() {
         <div className="flex flex-wrap gap-2">
           {user && (
             <>
-<Link
-  to="/mylistings"
-  className="
-    inline-block
-    border-2
-    border-black
-    bg-transparent
-    dark:bg-gray-800
-    dark:text-gray-300
-    dark:border-none
-    px-5 py-2.5
-    rounded-lg
-    bg-transparent
-    hover:bg-indigo-50
-    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-300
-    transition-colors duration-200
-  "
->
-  My Listings
-</Link>
+              <Link
+                to="/mylistings"
+                className="
+                  inline-block
+                  border-2
+                  border-black
+                  bg-transparent
+                  dark:bg-gray-800
+                  dark:text-gray-300
+                  dark:border-none
+                  px-5 py-2.5
+                  rounded-lg
+                  hover:bg-indigo-50
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-300
+                  transition-colors duration-200
+                "
+              >
+                My Listings
+              </Link>
 
-<Link
-  to="/marketplace/create"
-  className="
-    inline-block
-    border-2
-    border-green-600
-    text-green-600
-    px-5 py-2.5
-    rounded-lg
-    bg-transparent
-    hover:bg-green-50
-    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300
-    transition-colors duration-200
-  "
->
-  + New Listing
-</Link>
+              <Link
+                to="/marketplace/create"
+                className="
+                  inline-block
+                  border-2
+                  border-green-600
+                  text-green-600
+                  px-5 py-2.5
+                  rounded-lg
+                  bg-transparent
+                  hover:bg-green-50
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300
+                  transition-colors duration-200
+                "
+              >
+                + New Listing
+              </Link>
             </>
           )}
         </div>
@@ -211,8 +246,10 @@ export default function Marketplace() {
             className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Categories</option>
-            {CATEGORY_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
 
@@ -245,17 +282,17 @@ export default function Marketplace() {
           />
         </div>
 
-        {/* Multi-Tag Filter */}
+        {/* ─── Multi-Tag Filter ─────────────────────────────────────────────────── */}
         <div>
           <p className="text-gray-700 dark:text-gray-200 font-medium mb-2">Tags:</p>
           <div className="max-w-xl grid grid-cols-2 md:grid-cols-4 gap-2">
             {Array.isArray(tagsOptions) && tagsOptions.length > 0 ? (
-              tagsOptions.map(tag => (
+              tagsOptions.map((tag) => (
                 <label key={tag.id} className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     className="form-checkbox h-4 w-4 text-blue-600"
-                    checked={filters.tags.split(',').map(t => t.trim()).includes(tag.name)}
+                    checked={filters.tags.split(',').map((t) => t.trim()).includes(tag.name)}
                     onChange={() => toggleTag(tag.name)}
                   />
                   <span className="text-gray-700 dark:text-gray-200 text-sm">
@@ -274,11 +311,11 @@ export default function Marketplace() {
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <p className="text-gray-700 dark:text-gray-300 font-medium mb-2">Popular Tags:</p>
             <div className="flex flex-wrap gap-2">
-              {popularTags.map(tag => (
+              {popularTags.map((tag) => (
                 <button
                   key={tag.id}
                   onClick={() => {
-                    setFilters(prev => ({ ...prev, tags: tag.name }));
+                    setFilters((prev) => ({ ...prev, tags: tag.name }));
                   }}
                   className="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                 >
@@ -302,8 +339,12 @@ export default function Marketplace() {
       ) : (
         <>
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {listings.map(item => (
-              <MarketplaceCard key={item.id} item={item} />
+            {listings.map((item) => (
+              <MarketplaceCard
+                key={item.id}
+                item={item}
+                onHide={handleHide}  // ← pass down our new onHide handler
+              />
             ))}
           </div>
 

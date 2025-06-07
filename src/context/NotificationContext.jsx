@@ -129,7 +129,7 @@ useEffect(() => {
       {/* In-page toast */}
       {toastMsg && (
         <div
-          className={`fixed top-[9vh] right-4 p-3 rounded shadow-lg text-white transition-opacity ${
+          className={`fixed top-[20vh] right-4 p-3 rounded shadow-lg text-white transition-opacity ${
             toastType === 'error'
               ? 'bg-red-500'
               : toastType === 'success'
