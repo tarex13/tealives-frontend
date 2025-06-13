@@ -7,7 +7,8 @@ import { useNotification } from '../context/NotificationContext';
 import ProfileImageUploader from '../components/ProfileImageUploader';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
-import { CITIES, BUSINESS_TYPES } from '../../constants';
+import { BUSINESS_TYPES } from '../../constants';
+import { useCity } from '../context/CityContext';
 
 const USERNAME_CHANGE_LIMIT_DAYS = 30;
 const DAYS = [
@@ -28,6 +29,7 @@ const SOCIAL_PREFIXES = {
 export default function EditProfile() {
   const { user, setUser } = useAuth();
   const { showNotification } = useNotification();
+  const { cities } = useCity();
 
   const [form, setForm] = useState({
     username: '',
@@ -383,7 +385,7 @@ export default function EditProfile() {
             required
           >
             <option value="">Select City</option>
-            {CITIES.map((c) => (
+            {cities.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>

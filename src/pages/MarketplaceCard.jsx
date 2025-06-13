@@ -7,11 +7,14 @@ import MarketplaceCarousel from '../components/MarketplaceCarousel';
 import ListingActionMenu from '../components/ListingActionMenu';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
+import MarkSoldModal from '../components/MarkSoldModal';
+
 export default function MarketplaceCard({ item, onHide }) {
+const [markSoldOpen, setMarkSoldOpen] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isSaved, setIsSaved] = useState(item.is_saved || false);
-
+  const owner = item.seller?.id === user?.id;
   // 1) Determine “outbid” status:
   //    – Only if item.is_bidding && user has a bid (item.my_bid) 
   //      and item.highest_bid > item.my_bid → “You’ve been outbid!”
@@ -55,7 +58,7 @@ export default function MarketplaceCard({ item, onHide }) {
         {/* Save/Unsave Button (top-right) */}
        {user && <button
           onClick={handleToggleSave}
-          className="absolute top-2 right-10 z-10 text-2xl"
+          className="absolute top-2 right-10 z-10 text-2xl cursor-pointer"
           title={isSaved ? 'Unsave' : 'Save'}
           aria-label={isSaved ? 'Unsave listing' : 'Save listing'}
         >
@@ -68,12 +71,12 @@ export default function MarketplaceCard({ item, onHide }) {
             item={item}
             onEdited={() => {}}
             onDeleted={() => {}}
-            onSold={() => {}}
             onRelisted={() => {}}
             onHide={onHide} 
+            setMarkSoldOpen={setMarkSoldOpen}
           />
         </div>
-
+        <div className="z-10">
         {/* Carousel or Placeholder */}
         {Array.isArray(item.images) && item.images.length > 0 ? (
           <MarketplaceCarousel media={item.images} />
@@ -82,6 +85,7 @@ export default function MarketplaceCard({ item, onHide }) {
             No Image
           </div>
         )}
+        </div>
 
         {/* ─── “Outbid” Banner (only if isOutbid) ───────────────────────────── */}
         {isOutbid && (
@@ -205,11 +209,11 @@ export default function MarketplaceCard({ item, onHide }) {
             navigate(`/marketplace/${item.id}`);
           }}
           type="button"
-          className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition"
+          className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition cursor-pointer"
         >
           View Details
         </button>
-        {user && <button
+        {user && !owner && <button
           onClick={async (e) => {
             e.stopPropagation();
             if (!user) {
@@ -218,18 +222,28 @@ export default function MarketplaceCard({ item, onHide }) {
             }
             try {
               const res = await getOrCreateConversation(item.id);
-              const convoId = res.conversation_id;
+              console.log(res)
+              const convoId = res.data.conversation_id;
               navigate(`/inbox?conversation=${convoId}&to=${item.seller.id}`);
             } catch {
               alert('Could not open chat.');
             }
           }}
           type="button"
-          className="ml-2 text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 transition"
+          className="ml-2 text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 transition cursor-pointer" 
         >
           Message Seller
         </button>}
       </div>
+      {markSoldOpen && (
+        <MarkSoldModal
+          itemId={item.id}
+          onClose={() => setMarkSoldOpen(false)}
+          onSoldComplete={() => {
+            setMarkSoldOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

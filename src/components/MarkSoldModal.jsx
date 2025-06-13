@@ -99,7 +99,7 @@ export default function MarkSoldModal({ itemId, onClose, onSoldComplete }) {
   return (
     // Outermost wrapper: clicking anywhere here (backdrop or content) does NOT bubble up
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50"
+      className="fixed inset-0 flex items-center justify-center bg-black z-50 bg-opacity-40"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full space-y-4">
@@ -249,3 +249,4 @@ export default function MarkSoldModal({ itemId, onClose, onSoldComplete }) {
     </div>
   );
 }
+

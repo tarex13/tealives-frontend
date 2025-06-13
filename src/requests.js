@@ -19,7 +19,7 @@ export const fetchCities = async () => {
 
 
 export async function markMessageSeen(messageId) {
-  return api.post(`/api/messages/${messageId}/mark-seen/`);
+  return api.post(`/messages/${messageId}/mark-seen/`);
 }
 
 export const toggleFollow = userId =>
@@ -47,19 +47,17 @@ export const register = async (payload) => {
 };
 
 // 📬 Messaging
-export const fetchThreads = async () => {
-  // Now this hits the combined endpoint
-  const res = await api.get('messages/threads/');
-  // Each thread object includes `.type`: 'direct' or 'marketplace'
+export const fetchThreads = async (url = 'messages/threads/', params = {}) => {
+  // returns { count, next, previous, results }
+  const res = await api.get(url, { params });
   return res.data;
 };
-export const fetchThread = (userId, opts = {}) => {
-  // opts may include { conversation: <conversation_id> }
+export const fetchThread = async (userId, opts = {}) => {
+  // returns { count, next, previous, results }
   const params = {};
-  if (opts.conversation) {
-    params.conversation = opts.conversation;
-  }
-  return api.get(`messages/thread/${userId}/`, { params }).then(res => res.data);
+  if (opts.conversation) params.conversation = opts.conversation;
+  const res = await api.get(`messages/thread/${userId}/`, { params });
+  return res.data;
 };
 export const searchUsers = (query) =>
   api.get(`/users/search/`, { params: { q: query } }).then(res => res.data);
@@ -356,7 +354,7 @@ export async function reportMessage(messageId, reason = 'other') {
     content_id: messageId,
     reason_code: reason,
   };
-  const res = await api.post('/report/create/', payload);
+  const res = await api.post('/report/', payload);
   return res.data;
 }
 
@@ -452,8 +450,8 @@ export const getGroupPolls = (groupId) =>
 export const votePollOption = (pollId, selectedOptionId) =>
   api.post(`poll/vote/`, { poll: pollId, selected_option: selectedOptionId });
 
-export const sendReaction = (postId, emoji) =>
-  api.post('reactions/', { post: postId, emoji });
+export const sendReaction = (type, postId, emoji) =>
+  api.post('reactions/', { [type]: postId, emoji });
 
 export const toggleRSVP = (eventId) =>
   api.patch(`events/${eventId}/rsvp/`);
@@ -485,7 +483,7 @@ export const handlePin = async (postId, scope = 'personal', unpin = false) => {
 };
 
 export async function deletePost(postId) {
-  return api.delete(`/api/posts/${postId}/`);
+  return api.delete(`/posts/${postId}/`);
 }
 
 export const updatePost = (postId, payload) =>

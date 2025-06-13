@@ -4,11 +4,29 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { markNotificationsRead } from '../requests';
-import { parseISO, isToday, isYesterday } from 'date-fns';
+import { parseISO, isToday, isYesterday, isValid } from 'date-fns';
 
-function groupByDate(items) {
+function groupByDate(items = []) {
   return items.reduce((acc, n) => {
-    const d = parseISO(n.created_at);
+    const raw = n.created_at ?? n.sent_at ?? n.timestamp ?? n.date;
+    if (!raw) {
+      (acc['Unknown'] ||= []).push(n);
+      return acc;
+   }
+
+    let d;
+    try {
+      d = parseISO(raw);
+    } catch {
+      (acc['Unknown'] ||= []).push(n);
+      return acc;
+    }
+
+    if (!isValid(d)) {
+      (acc['Unknown'] ||= []).push(n);
+      return acc;
+    }
+
     const day = isToday(d)
       ? 'Today'
       : isYesterday(d)
@@ -77,7 +95,10 @@ export default function NotificationDropdown() {
   if (!user) return null;
 
   // Group by date for headings
-  const grouped = groupByDate(notifications);
+    // make sure notifications is always an array
+  const grouped = Array.isArray(notifications)
+    ? groupByDate(notifications)
+    : {};
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -132,7 +153,9 @@ export default function NotificationDropdown() {
                           {n.content}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {new Date(n.created_at).toLocaleString()}
+                                                    {n.created_at
+                            ? new Date(n.created_at).toLocaleString()
+                            : '—'}
                         </div>
                       </li>
                     ))}

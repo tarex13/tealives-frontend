@@ -1,17 +1,26 @@
 // src/pages/Home.jsx
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
-import { fetchPosts, fetchEvents, fetchPostById } from '../requests';
-import FeedCard from '../components/FeedCard';
-import CreatePost from '../components/CreatePost';
-import EventCard from '../components/EventCard';
-import CitySelectorModal from '../components/CitySelectorModal';
-import { useAuth } from '../context/AuthContext';
-import { CITIES } from '../../constants';
-import { useCity } from '../context/CityContext';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from 'react'
+import { useLocation } from 'react-router-dom'
+import { fetchPosts, fetchEvents, fetchPostById } from '../requests'
+import FeedCard from '../components/FeedCard'
+import CreatePost from '../components/CreatePost'
+import EventCard from '../components/EventCard'
+import CitySelectorModal from '../components/CitySelectorModal'
+import { useAuth } from '../context/AuthContext'
+import { useCity } from '../context/CityContext'
 
+/**
+ * CityFilter
+ * — Fetches `city` + dynamic `cities` list from context
+ * — Renders a <select> so user can switch city on the fly
+ */
 function CityFilter() {
-  const { city, setCity } = useCity();
+  const { city, setCity, cities } = useCity()            // pull in our reactive city list
   return (
     <div className="mb-4 flex flex-wrap items-center space-x-2">
       <label className="font-medium text-sm">City:</label>
@@ -20,16 +29,21 @@ function CityFilter() {
         onChange={(e) => setCity(e.target.value)}
         className="p-2 text-sm border rounded bg-white dark:bg-gray-900 dark:text-white focus:outline-none focus:ring focus:ring-blue-300"
       >
-        {CITIES.map((cityName) => (
+        {/* map over the context‐provided cities array */}
+        {cities.map((cityName) => (
           <option key={cityName} value={cityName}>
             {cityName.charAt(0).toUpperCase() + cityName.slice(1)}
           </option>
         ))}
       </select>
     </div>
-  );
+  )
 }
 
+/**
+ * SortFilter
+ * — Unchanged: lets user pick post sort order
+ */
 function SortFilter({ sort, setSort }) {
   return (
     <div className="mb-4 flex items-center space-x-2">
@@ -46,149 +60,151 @@ function SortFilter({ sort, setSort }) {
         <option value="random">🎲 Surprise Me</option>
       </select>
     </div>
-  );
+  )
 }
 
 // Interleave posts + events (existing logic) ──────────────────────────────────
 function mixContent(posts, events) {
-  const mixed = [];
-  const eventFrequency = Math.floor(posts.length / (events.length + 1)) || posts.length + 1;
-  let eventIndex = 0;
+  const mixed = []
+  const eventFrequency =
+    Math.floor(posts.length / (events.length + 1)) || posts.length + 1
+  let eventIndex = 0
 
   posts.forEach((post, idx) => {
-    mixed.push({ type: 'post', data: post });
+    mixed.push({ type: 'post', data: post })
     if ((idx + 1) % eventFrequency === 0 && eventIndex < events.length) {
-      mixed.push({ type: 'event', data: events[eventIndex++] });
+      mixed.push({ type: 'event', data: events[eventIndex++] })
     }
-  });
+  })
   while (eventIndex < events.length) {
-    mixed.push({ type: 'event', data: events[eventIndex++] });
+    mixed.push({ type: 'event', data: events[eventIndex++] })
   }
-  return mixed;
+  return mixed
 }
 
 export default function Home() {
-  const { user } = useAuth();
-  const { city } = useCity();
-  const location = useLocation();
+  const { user } = useAuth()
+  const { city } = useCity()             // current selected city
+  const location = useLocation()
 
-  // Read “start=<postId>” from URL, if present
-  const params = new URLSearchParams(location.search);
-  const startId = params.get('start'); // e.g. "23"
+  // Optional “start” query param to feature a specific post
+  const params = new URLSearchParams(location.search)
+  const startId = params.get('start')
 
   // ───── Feed state ────────────────────────────────────────────────────────
-  const [posts, setPosts]       = useState([]);
-  const [events, setEvents]     = useState([]);
-  const [next, setNext]         = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [sort, setSort]         = useState('newest');
-  const [error, setError]       = useState(null);
+  const [posts, setPosts]               = useState([])
+  const [events, setEvents]             = useState([])
+  const [next, setNext]                 = useState(null)
+  const [loading, setLoading]           = useState(true)
+  const [loadingMore, setLoadingMore]   = useState(false)
+  const [sort, setSort]                 = useState('newest')
+  const [error, setError]               = useState(null)
 
   // CreatePost modal + scroll-trigger state
-  const [showModal, setShowModal]   = useState(false);
-  const createCardRef = useRef(null);
-  const [showBubble, setShowBubble] = useState(false);
+  const [showModal, setShowModal]       = useState(false)
+  const createCardRef                   = useRef(null)
+  const [showBubble, setShowBubble]     = useState(false)
 
   // ───── Load initial feed & events ────────────────────────────────────────
   const refreshContent = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      // 1) Fetch paginated posts + events in parallel
-      const postRes  = await fetchPosts(city, sort);
-      const eventRes = await fetchEvents(city);
+      // 1) Fetch posts + events in parallel
+      const [postRes, eventRes] = await Promise.all([
+        fetchPosts(city, sort),
+        fetchEvents(city),
+      ])
 
-      // 2) Put posts + events into state
-      setPosts(postRes.results || []);
-      setEvents(eventRes.results || []);
-      setNext(postRes.next || null);
+      // 2) Store them
+      setPosts(postRes.results || [])
+      setEvents(eventRes.results || [])
+      setNext(postRes.next || null)
 
-      // 3) If ?start=<id> is present, fetch that single post and prepend it
+      // 3) If “?start=ID” add that post to the front
       if (startId) {
         try {
-          const featured = await fetchPostById(startId);
-          if (featured && featured.id) {
+          const featured = await fetchPostById(startId)
+          if (featured?.id) {
             setPosts((prev) => {
-              // Filter out any duplicate of “start” and then put it at front
-              const deduped = prev.filter((p) => p.id !== featured.id);
-              return [featured, ...deduped];
-            });
+              const deduped = prev.filter((p) => p.id !== featured.id)
+              return [featured, ...deduped]
+            })
           }
         } catch {
-          // If fetchPostById fails (e.g. post not found), we just ignore
-          console.warn(`Could not fetch postId=${startId}`);
+          console.warn(`Could not fetch postId=${startId}`)
         }
       }
     } catch {
-      setError('Failed to load content.');
+      setError('Failed to load content.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [city, sort, startId]);
+  }, [city, sort, startId])
 
-  // Whenever “city” or “sort” or “startId” changes, refreshContent
+  // Refresh on city, sort, or startId change
   useEffect(() => {
-    if (city) refreshContent();
-  }, [city, sort, startId, refreshContent]);
+    if (city) refreshContent()
+  }, [city, sort, startId, refreshContent])
 
-  // ───── Infinite‐scroll “load more” logic ──────────────────────────────────
-  const observer = useRef();
+  // ───── Infinite scroll “load more” ───────────────────────────────────────
+  const observer = useRef()
   const lastRef  = useCallback(
     (node) => {
-      if (loading || loadingMore) return;
-      if (observer.current) observer.current.disconnect();
+      if (loading || loadingMore) return
+      if (observer.current) observer.current.disconnect()
+
       observer.current = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting && next) {
-          setLoadingMore(true);
+          setLoadingMore(true)
           fetchPosts(city, sort, next)
             .then((res) => {
               const newOnes = (res.results || []).filter(
-                (p) => !posts.find((old) => old.id === p.id)
-              );
-              setPosts((prev) => [...prev, ...newOnes]);
-              setNext(res.next || null);
+                (p) => !posts.some((old) => old.id === p.id)
+              )
+              setPosts((prev) => [...prev, ...newOnes])
+              setNext(res.next || null)
             })
-            .catch(() => {
-              /* ignore */
-            })
-            .finally(() => setLoadingMore(false));
+            .catch(() => {})
+            .finally(() => setLoadingMore(false))
         }
-      });
-      if (node) observer.current.observe(node);
+      })
+
+      if (node) observer.current.observe(node)
     },
     [loading, loadingMore, next, city, sort, posts]
-  );
+  )
 
   // ───── Mobile “Create Post” bubble logic ──────────────────────────────────
   useEffect(() => {
-    if (!createCardRef.current) return;
+    if (!createCardRef.current) return
     const io = new IntersectionObserver(
       ([e]) => setShowBubble(!e.isIntersecting),
       { threshold: 0 }
-    );
-    io.observe(createCardRef.current);
-    return () => io.disconnect();
-  }, []);
+    )
+    io.observe(createCardRef.current)
+    return () => io.disconnect()
+  }, [])
 
-  if (!city) return <CitySelectorModal />;
+  // If no city is selected yet, show the CitySelector modal
+  if (!city) return <CitySelectorModal />
 
   return (
     <>
-      {/* Desktop: full CreatePost */}
+      {/* Desktop CreatePost */}
       {user && (
         <div className="hidden md:block max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">
           <CreatePost
             onPostCreated={async (newPost) => {
-              const full = await fetchPostById(newPost.id);
-              setPosts((prev) => [full || newPost, ...prev]);
+              const full = await fetchPostById(newPost.id)
+              setPosts((prev) => [full || newPost, ...prev])
             }}
           />
         </div>
       )}
 
-      {/* Mobile: shadowed “Create Post” card */}
+      {/* Mobile CreatePost card */}
       {user && (
         <div
           ref={createCardRef}
@@ -202,7 +218,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Mobile: floating bubble when card scrolls off */}
+      {/* Floating bubble on mobile */}
       {user && showBubble && (
         <button
           onClick={() => setShowModal(true)}
@@ -212,33 +228,34 @@ export default function Home() {
         </button>
       )}
 
-      {/* Modal for CreatePost */}
+      {/* CreatePost modal */}
       {showModal && (
         <div
-          className="fixed items-center inset-0 bg-black bg-opacity-50 flex justify-center p-4 z-40 overflow-auto"
+          className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-40"
           onClick={() => setShowModal(false)}
         >
           <div
-            className="w-full max-w-md bg-white dark:bg-gray-900 rounded-xl p-6 relative"
+            className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-xl p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowModal(false)}
-              className="absolute cursor-pointer top-4 right-4 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             >
               ✕
             </button>
             <CreatePost
               onPostCreated={async (newPost) => {
-                const full = await fetchPostById(newPost.id);
-                setPosts((prev) => [full || newPost, ...prev]);
-                setShowModal(false);
+                const full = await fetchPostById(newPost.id)
+                setPosts((prev) => [full || newPost, ...prev])
+                setShowModal(false)
               }}
             />
           </div>
         </div>
       )}
 
+      {/* Main feed */}
       <main className="max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">
         <div className="flex flex-col md:flex-row md:justify-between gap-4 mb-4">
           <CityFilter />
@@ -247,7 +264,7 @@ export default function Home() {
 
         {loading && (
           <p className="text-center text-gray-500 dark:text-gray-400">
-            Loading content… 
+            Loading content…
           </p>
         )}
         {error && (
@@ -273,15 +290,14 @@ export default function Home() {
           </div>
         ))}
 
-        {/* sentinel for infinite scroll */}
+        {/* infinite‐scroll sentinel */}
         <div ref={lastRef} className="h-10" />
         {loadingMore && (
           <p className="text-center text-gray-500 dark:text-gray-400 mt-2">
-            Loading more… 
+            Loading more…
           </p>
         )}
       </main>
     </>
-  );
+  )
 }
-

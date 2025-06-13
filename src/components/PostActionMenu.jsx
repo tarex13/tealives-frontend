@@ -130,13 +130,13 @@ export default function PostActionMenu({
     'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600';
 
   return (
-    <div className="" ref={menuRef}>
+    <div className="cursor-pointer" ref={menuRef}>
       <button
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full cursor-pointer"
         aria-label="Post options"
       >
         ⋯

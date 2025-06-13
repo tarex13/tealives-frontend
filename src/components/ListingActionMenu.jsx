@@ -11,7 +11,7 @@ import {
 
 import ReportModal from './ReportModal';
 import ReportListModal from './ReportListModal'; // (already there)
-import MarkSoldModal from './MarkSoldModal';
+
 
 import { useNotification } from '../context/NotificationContext';
 
@@ -19,9 +19,9 @@ export default function ListingActionMenu({
   item,
   onEdited,
   onDeleted,
-  onSold,
   onRelisted,
   onHide,
+  setMarkSoldOpen,
 }) {
   const { id, seller, status, is_saved } = item;
 
@@ -33,7 +33,6 @@ export default function ListingActionMenu({
   const [open, setOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportListOpen, setReportListOpen] = useState(false);
-  const [markSoldOpen, setMarkSoldOpen] = useState(false);
 
   const { showNotification } = useNotification();
   const menuRef = useRef();
@@ -138,13 +137,13 @@ export default function ListingActionMenu({
   };
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
+    <div className="relative inline-block text-left " ref={menuRef}>
       <button
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full focus:outline-none"
+        className="p-1 bg-gray-200 dark:bg-gray-700 rounded-full focus:outline-none cursor-pointer"
         title="Actions"
       >
         ⋯
@@ -159,7 +158,7 @@ export default function ListingActionMenu({
                 {status === 'available' && (
                   <button
                     onClick={handleEdit}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                   >
                     ✏️ Edit Listing
                   </button>
@@ -167,7 +166,7 @@ export default function ListingActionMenu({
 
                 <button
                   onClick={handleDelete}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 cursor-pointer"
                 >
                   🗑️ Delete Listing
                 </button>
@@ -175,7 +174,7 @@ export default function ListingActionMenu({
                 {status === 'available' && (
                   <button
                     onClick={handleMarkSoldClick}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                   >
                     ✅ Mark as Sold
                   </button>
@@ -184,7 +183,7 @@ export default function ListingActionMenu({
                 {status === 'sold' && (
                   <button
                     onClick={handleRelist}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                   >
                     🔄 Relist Item
                   </button>
@@ -197,21 +196,21 @@ export default function ListingActionMenu({
                   <>
                     <button
                       onClick={handleMessageSeller}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                     >
                       💬 Message Seller
                     </button>
 
                     <button
                       onClick={handleSaveToggle}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                     >
                       {is_saved ? '💔 Unsave Listing' : '💖 Save Listing'}
                     </button>
 
                     <button
                       onClick={handleReport}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 cursor-pointer"
                     >
                       🚩 Report Listing
                     </button>
@@ -222,14 +221,14 @@ export default function ListingActionMenu({
 
             <button
               onClick={handleHide}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
             >
               🙈 Hide Listing
             </button>
 
             <button
               onClick={() => navigate(`/profile/${seller.username}`)}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
             >
               🙍 View Profile
             </button>
@@ -238,7 +237,7 @@ export default function ListingActionMenu({
             {canModerate && (
               <button
                 onClick={handleDelete}
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 cursor-pointer"
               >
                 🗑️ Delete Listing (Mod)
               </button>
@@ -252,7 +251,7 @@ export default function ListingActionMenu({
                   setOpen(false);
                   setReportListOpen(true);
                 }}
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
               >
                 📝 View Reports
               </button>
@@ -279,16 +278,6 @@ export default function ListingActionMenu({
         onClose={() => setReportListOpen(false)}
       />
 
-      {markSoldOpen && (
-        <MarkSoldModal
-          itemId={id}
-          onClose={() => setMarkSoldOpen(false)}
-          onSoldComplete={() => {
-            setMarkSoldOpen(false);
-            if (onSold) onSold();
-          }}
-        />
-      )}
     </div>
   );
 }

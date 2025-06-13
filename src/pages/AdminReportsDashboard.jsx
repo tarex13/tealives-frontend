@@ -918,6 +918,13 @@ function MessageModal({ report, onClose, sendMessage }) {
   // Example templates
   const templates = [
     {
+      id: 'none',
+      label: 'None',
+      subject: '',
+      body:
+        "",
+    },
+    {
       id: 'warn_harassment',
       label: 'Harassment Warning',
       subject: 'Warning: Harassment Policy Violation',
@@ -1005,7 +1012,6 @@ function MessageModal({ report, onClose, sendMessage }) {
             }}
             className="block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-md"
           >
-            <option value="">— None —</option>
             {templates.map((tpl) => (
               <option key={tpl.id} value={tpl.id}>
                 {tpl.label}

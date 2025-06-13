@@ -1,9 +1,9 @@
-// ── src/pages/CreateEvent.jsx ──
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useNotification } from '../context/NotificationContext';
-import { createEvent } from '../requests';
-import { toZonedTime } from 'date-fns-tz';
+// src/pages/CreateEvent.jsx
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useNotification } from '../context/NotificationContext'
+import { createEvent } from '../requests'
+import { toZonedTime } from 'date-fns-tz'
 import {
   FaMapMarkerAlt,
   FaClock,
@@ -12,8 +12,8 @@ import {
   FaImage,
   FaAngleDown,
   FaAngleUp,
-} from 'react-icons/fa';
-import { CITIES } from '../../constants'; // <-- read‐only proxy of your city list
+} from 'react-icons/fa'
+import { useCity } from '../context/CityContext'     // pull in our reactive city list
 
 const TAG_OPTIONS = [
   'Tech',
@@ -24,24 +24,25 @@ const TAG_OPTIONS = [
   'Business',
   'Social',
   'Education',
-];
+]
 const CATEGORY_OPTIONS = [
   'conference',
   'meetup',
   'workshop',
   'party',
   'other',
-];
+]
 
 export default function CreateEvent() {
-  const navigate = useNavigate();
-  const { showNotification } = useNotification();
+  const navigate = useNavigate()
+  const { showNotification } = useNotification()
+  const { cities } = useCity()                      // get dynamic cities array from context
 
   const [form, setForm] = useState({
     title: '',
     description: '',
     location: '',
-    city: '', // will be a value from CITIES
+    city: '',          // selected city from dropdown
     start_time: '',
     rsvp_deadline: '',
     rsvp_limit: '',
@@ -54,43 +55,43 @@ export default function CreateEvent() {
     contact_phone: '',
     minimum_age_required: false,
     minimum_age: '',
-  });
+  })
 
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [showExtras, setShowExtras] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [showExtras, setShowExtras] = useState(false)
 
-  // Handle simple field changes (text, checkbox)
+  // Handle general input changes (text, select, checkbox)
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type, checked } = e.target
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
-    }));
-  };
+    }))
+  }
 
-  // Handle multi‐select tags
+  // Handle multi-select tags
   const handleTagChange = (e) => {
-    const options = Array.from(e.target.selectedOptions).map((o) => o.value);
-    setForm((prev) => ({ ...prev, tags: options }));
-  };
+    const options = Array.from(e.target.selectedOptions).map((o) => o.value)
+    setForm((prev) => ({ ...prev, tags: options }))
+  }
 
-  // Handle banner filepicker + preview
+  // Handle image file selection + preview URL
   const handleBannerChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files[0]
     if (file) {
-      setForm((prev) => ({ ...prev, banner: file }));
-      setPreviewUrl(URL.createObjectURL(file));
+      setForm((prev) => ({ ...prev, banner: file }))
+      setPreviewUrl(URL.createObjectURL(file))
     }
-  };
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
 
-    // Required fields check
+    // Validate required fields
     if (
       !form.title ||
       !form.description ||
@@ -99,52 +100,53 @@ export default function CreateEvent() {
       !form.start_time ||
       !form.category
     ) {
-      setError('Please fill out all required fields (marked with *).');
-      setSubmitting(false);
-      return;
+      setError('Please fill out all required fields (marked with *).')
+      setSubmitting(false)
+      return
     }
 
-    // Convert local datetime to UTC ISO:
-    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const startTimeUtc = toZonedTime(form.start_time, userTimeZone);
-    if (startTimeUtc < new Date()) {
-      setError('Event must be scheduled in the future.');
-      setSubmitting(false);
-      return;
+    // Convert user's local datetime to UTC before submission
+    const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const startUtc = toZonedTime(form.start_time, userTZ)
+    if (startUtc < new Date()) {
+      setError('Event must be scheduled in the future.')
+      setSubmitting(false)
+      return
     }
 
     try {
-      const formData = new FormData();
-      formData.append('title', form.title);
-      formData.append('description', form.description);
-      formData.append('location', form.location);
-      formData.append('city', form.city.toLowerCase());
-      formData.append('datetime', startTimeUtc.toISOString());
-      formData.append('rsvp_deadline', form.rsvp_deadline || '');
-      formData.append('rsvp_limit', form.rsvp_limit || '');
-      formData.append('category', form.category);
-      formData.append('tags', JSON.stringify(form.tags)); // backend expects JSON array
-      formData.append('show_countdown', form.show_countdown);
-      formData.append('external_url', form.external_url);
-      formData.append('contact_email', form.contact_email);
-      formData.append('contact_phone', form.contact_phone);
+      const fd = new FormData()
+      fd.append('title', form.title)
+      fd.append('description', form.description)
+      fd.append('location', form.location)
+      // ensure city is lowercase for backend consistency
+      fd.append('city', form.city.toLowerCase())
+      fd.append('datetime', startUtc.toISOString())
+      fd.append('rsvp_deadline', form.rsvp_deadline || '')
+      fd.append('rsvp_limit', form.rsvp_limit || '')
+      fd.append('category', form.category)
+      fd.append('tags', JSON.stringify(form.tags))
+      fd.append('show_countdown', form.show_countdown)
+      fd.append('external_url', form.external_url)
+      fd.append('contact_email', form.contact_email)
+      fd.append('contact_phone', form.contact_phone)
       if (form.minimum_age_required) {
-        formData.append('minimum_age', form.minimum_age);
+        fd.append('minimum_age', form.minimum_age)
       }
       if (form.banner) {
-        formData.append('banner', form.banner);
+        fd.append('banner', form.banner)
       }
 
-      await createEvent(formData);
-      showNotification('🎉 Event created successfully!', 'success');
-      navigate('/events');
+      await createEvent(fd)
+      showNotification('🎉 Event created successfully!', 'success')
+      navigate('/events')
     } catch (err) {
-      console.error('Create Event Error:', err);
-      setError('Something went wrong. Please try again.');
+      console.error('Create Event Error:', err)
+      setError('Something went wrong. Please try again.')
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-900 shadow-md rounded-lg">
@@ -187,7 +189,7 @@ export default function CreateEvent() {
           placeholder="123 Main St, Suite 100"
         />
 
-        {/* City (dropdown from CITIES) */}
+        {/* City dropdown powered by context `cities` */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             City *
@@ -202,7 +204,7 @@ export default function CreateEvent() {
             <option value="" disabled>
               Select a city…
             </option>
-            {CITIES.map((c) => (
+            {cities.map((c) => (
               <option key={c} value={c}>
                 {c.charAt(0).toUpperCase() + c.slice(1)}
               </option>
@@ -230,7 +232,7 @@ export default function CreateEvent() {
           options={CATEGORY_OPTIONS}
         />
 
-        {/* Tags (multi‐select) */}
+        {/* Tags multi-select */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Tags
@@ -249,8 +251,8 @@ export default function CreateEvent() {
             ))}
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            (Hold <kbd className="px-1 py-0.5 dark:bg-gray-800 dark:text-white rounded text-black">Ctrl</kbd> or{' '}
-            <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-800 dark:text-white rounded text-black">⌘</kbd> to select multiple)
+            (Hold <kbd className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-800 dark:text-white text-black">Ctrl</kbd> or{' '}
+            <kbd className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-800 dark:text-white text-black">⌘</kbd> to select multiple)
           </p>
         </div>
 
@@ -262,7 +264,7 @@ export default function CreateEvent() {
           onChange={handleChange}
         />
 
-        {/* Optional Fields (toggle) */}
+        {/* Optional Extras */}
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
           <button
             type="button"
@@ -275,7 +277,6 @@ export default function CreateEvent() {
 
           {showExtras && (
             <div className="space-y-6 mt-4">
-              {/* RSVP Deadline */}
               <TextInput
                 type="datetime-local"
                 label="RSVP Deadline"
@@ -283,8 +284,6 @@ export default function CreateEvent() {
                 value={form.rsvp_deadline}
                 onChange={handleChange}
               />
-
-              {/* Max Attendees */}
               <TextInput
                 type="number"
                 label="Max Attendees"
@@ -294,8 +293,6 @@ export default function CreateEvent() {
                 icon={<FaUser className="inline mr-1 text-gray-500" />}
                 min={1}
               />
-
-              {/* External URL */}
               <TextInput
                 label="External URL"
                 name="external_url"
@@ -303,18 +300,14 @@ export default function CreateEvent() {
                 onChange={handleChange}
                 placeholder="https://your-event-page.com"
               />
-
-              {/* Contact Email */}
               <TextInput
                 label="Contact Email"
                 name="contact_email"
                 value={form.contact_email}
                 onChange={handleChange}
-                placeholder="you@example.com"
                 type="email"
+                placeholder="you@example.com"
               />
-
-              {/* Contact Phone */}
               <TextInput
                 label="Contact Phone"
                 name="contact_phone"
@@ -322,8 +315,6 @@ export default function CreateEvent() {
                 onChange={handleChange}
                 placeholder="(555) 123-4567"
               />
-
-              {/* Minimum Age */}
               <Checkbox
                 label="Minimum Age Requirement"
                 name="minimum_age_required"
@@ -345,7 +336,7 @@ export default function CreateEvent() {
           )}
         </div>
 
-        {/* Banner Image Upload */}
+        {/* Banner Upload */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
             <FaImage className="inline mr-1" /> Banner Image (optional)
@@ -365,7 +356,7 @@ export default function CreateEvent() {
           )}
         </div>
 
-        {/* Submit Button */}
+        {/* Submit */}
         <div>
           <button
             type="submit"
@@ -381,7 +372,7 @@ export default function CreateEvent() {
         </div>
       </form>
     </div>
-  );
+  )
 }
 
 // ─── Reusable Form Components ───────────────────────────────────────────────────
@@ -413,7 +404,7 @@ const TextInput = ({
       {...props}
     />
   </div>
-);
+)
 
 const TextArea = ({ label, name, value, onChange, placeholder = '' }) => (
   <div>
@@ -429,7 +420,7 @@ const TextArea = ({ label, name, value, onChange, placeholder = '' }) => (
       className="w-full mt-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
     />
   </div>
-);
+)
 
 const Dropdown = ({ label, name, value, onChange, options }) => (
   <div>
@@ -449,7 +440,7 @@ const Dropdown = ({ label, name, value, onChange, options }) => (
       ))}
     </select>
   </div>
-);
+)
 
 const Checkbox = ({ label, name, checked, onChange }) => (
   <div className="flex items-center gap-2">
@@ -462,4 +453,4 @@ const Checkbox = ({ label, name, checked, onChange }) => (
     />
     <label className="text-sm text-gray-700 dark:text-gray-300">{label}</label>
   </div>
-);
+)

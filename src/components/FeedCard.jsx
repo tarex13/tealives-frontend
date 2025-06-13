@@ -83,7 +83,7 @@ export default function FeedCard({ post, refetchPostData }) {
   const handleReaction = async (emoji) => {
     setLoadingEmoji(emoji);
     try {
-      await sendReaction(post.id, emoji);
+      await sendReaction('post_id', post.id, emoji);
       const updated = { ...summary };
       const nextUser = [...userReacts];
       const exists = nextUser.includes(emoji);
@@ -229,7 +229,7 @@ export default function FeedCard({ post, refetchPostData }) {
               key={emoji}
               onClick={() => handleReaction(emoji)}
               disabled={loadingEmoji === emoji}
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-transform hover:scale-105 ${
+              className={`flex items-center cursor-pointer gap-1 px-3 py-1 rounded-full text-sm font-medium transition-transform hover:scale-105 ${
                 active
                   ? 'bg-blue-100 text-blue-700 dark:bg-blue-700 dark:text-white'
                   : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'

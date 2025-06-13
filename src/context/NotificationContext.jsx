@@ -24,8 +24,8 @@ export const NotificationProvider = ({ children }) => {
 
   // Fetch from REST, always normalize to an array
   const fetchNotifications = useCallback(async () => {
-    if(user)
-{    try {
+    if (!user) return;
+    try {
       const res = await api.get('notifications/');
       const data = res.data;
       // data might be { results: [...] } or an array
@@ -38,8 +38,8 @@ export const NotificationProvider = ({ children }) => {
     } catch (err) {
       console.error('Fetch notifs failed', err);
     }
-}
-  }, []);
+
+  }, [user]);
 
   // Mark one as read (REST + local)
   const markAsRead = async (id) => {
@@ -122,6 +122,7 @@ useEffect(() => {
         unreadCount,
         showNotification,
         markAsRead,
+        reloadNotifications: fetchNotifications,
       }}
     >
       {children}

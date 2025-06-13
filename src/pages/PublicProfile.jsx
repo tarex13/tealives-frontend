@@ -321,8 +321,9 @@ export default function Profile() {
 
   // ─── Compute XP/Level ──────────────────────────────────────────────────────────
   const xp = info?.xp_points ?? 0;
-  const level = Math.floor(xp / 100);
-  const progress = xp % 100;
+  const onexp = 100;
+  const level = Math.floor(xp / onexp);
+  const progress = xp % onexp;
 
   // ─── Build Tabs ───────────────────────────────────────────────────────────────
   const publicTabs = [
@@ -452,7 +453,7 @@ export default function Profile() {
       {/* XP Bar */}
       <div className="mb-4">
         <h2 className="text-base font-semibold text-gray-700 dark:text-gray-200 mb-1">
-          Progress
+          Progress({onexp}xp = 1 Level)
         </h2>
         <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-1">
           Level {level} — {progress}% to next
@@ -618,7 +619,7 @@ export default function Profile() {
               onClick={() => setActiveTab(tab)}
               className={`
                 flex-shrink-0
-                px-4 py-3 text-center font-medium
+                px-4 py-3 text-center font-medium cursor-pointer
                 ${
                   activeTab === tab
                     ? 'border-b-2 border-blue-600 text-blue-600'

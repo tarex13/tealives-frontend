@@ -8,7 +8,7 @@ import {
 } from '../requests';
 import MediaManager from '../components/MediaManager';
 import ImageEditorModal from '../components/ImageEditorModal';
-import { CITIES } from '../../constants';
+import { useCity } from '../context/CityContext';
 
 const CATEGORY_CHOICES = [
   { value: 'electronics', label: 'Electronics' },
@@ -48,6 +48,7 @@ const CONDITION_CHOICES = [
 ];
 
 export default function CreateListing({ isEdit = false }) {
+  const { CITIES } = useCity();
   const { id: paramId } = useParams();
   const listingId = paramId ? parseInt(paramId, 10) : null;
   const navigate = useNavigate();

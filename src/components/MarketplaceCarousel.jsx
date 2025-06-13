@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { FaTimes } from 'react-icons/fa';
 
 export default function MarketplaceCarousel({ media = [] }) {
   const [current, setCurrent] = useState(0);
@@ -39,7 +40,7 @@ export default function MarketplaceCarousel({ media = [] }) {
       <img
         src={getImageUrl(media[current])}
         alt={`Media ${current + 1}`}
-        className="w-full aspect-[4/3] object-cover rounded transition-opacity duration-300 cursor-pointer"
+        className="w-full aspect-[4/3] object-cover rounded transition-opacity duration-300"
         onClick={() => setLightboxOpen(true)}
         loading="lazy"
       />
@@ -64,16 +65,46 @@ export default function MarketplaceCarousel({ media = [] }) {
       )}
 
       {lightboxOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <img
-            src={getImageUrl(media[current])}
-            alt={`Zoomed Media ${current + 1}`}
-            className="max-w-full max-h-full"
-          />
+          <div
+    className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50"
+    onClick={() => setLightboxOpen(false)}
+  >
+       <div
+      className="relative max-w-[90%] max-h-[90%] flex items-center"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* ─── Always-visible close button ───────────────────────────── */}
+      <button
+        onClick={() => setLightboxOpen(false)}
+        className="
+          absolute top-2 right-2
+          p-2 rounded-full
+          bg-gray-800 z-10
+          text-white text-2xl
+          focus:outline-none focus:ring-2 focus:ring-white
+          transition-opacity duration-200
+        "
+      >
+        <FaTimes />
+      </button>
+      
+
+      {/* the image */}
+     <img
+        src={getImageUrl(media[current])}
+        alt={`Zoomed Media ${current + 1}`}
+       className="max-w-full max-h-full rounded-lg shadow-lg cursor-pointer transform hover:scale-105 transition-transform duration-300"
+      />
+
+
+      {/* optional caption */}
+      {media[current].caption && (
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-60 px-3 py-1 rounded">
+          {media[current].caption}
         </div>
+      )}
+    </div>
+    </div>
       )}
     </div>
   );

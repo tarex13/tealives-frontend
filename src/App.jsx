@@ -129,7 +129,7 @@ function App() {
           {user &&  (
                  <Sidebar
               isOpen={sidebarOpen}
-              setSidebarOpen={setSidebarOpen}
+              setSidebarMinimized={setSidebarMinimized}
               toggleSidebar={toggleSidebar}
               isMinimized={sidebarMinimized}
               toggleMinimize={toggleMinimize}

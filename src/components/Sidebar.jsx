@@ -18,7 +18,7 @@ import {
 
 export default function Sidebar({
   isOpen,
-  setSidebarOpen,
+  setSidebarMinimized,
   toggleSidebar,
   isMinimized,
   toggleMinimize,
@@ -93,7 +93,7 @@ export default function Sidebar({
               <Bookmark className="w-5 h-5 text-gray-800 dark:text-gray-200" />
             </NavLink>
             <button
-              onClick={() => setSettingsOpen(o => !o)}
+              onClick={() => {setSettingsOpen(o => !o); setSidebarMinimized(false);}}
               className={iconOnlyClasses}
               title="Settings"
             >
@@ -121,7 +121,7 @@ export default function Sidebar({
             {(isAdmin || isStaff || isModerator) && (
               <>
                 <button
-                  onClick={() => setModerationOpen(o => !o)}
+                  onClick={() => {setModerationOpen(o => !o); setSidebarMinimized(false);}}
                   className={iconOnlyClasses}
                   title="Moderation"
                 >
@@ -185,7 +185,7 @@ export default function Sidebar({
             {user && (
               <>
                 <button
-                  onClick={() => setSettingsOpen(o => !o)}
+                  onClick={() => {setSettingsOpen(o => !o); setSidebarMinimized(false);}}
                   className="flex justify-between w-full px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
                 >
                   <span className="flex items-center gap-3">
@@ -223,7 +223,7 @@ export default function Sidebar({
             {(isAdmin || isStaff || isModerator) && (
               <>
                 <button
-                  onClick={() => setModerationOpen(o => !o)}
+                  onClick={() => {setModerationOpen(o => !o); setSidebarMinimized(false);}}
                   className="flex justify-between w-full px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
                 >
                   <span className="flex items-center gap-3 text-red-600">
@@ -252,14 +252,14 @@ export default function Sidebar({
             )}
 
             {/* Admin Dashboard */}
-            {isAdmin && (
+            {/*isAdmin && (
               <NavLink
                 to="/admin/dashboard"
                 className="block mt-4 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-800 text-red-700 dark:text-white font-bold hover:bg-red-200 dark:hover:bg-red-700 transition"
               >
                 Admin Dashboard
               </NavLink>
-            )}
+            )*/}
 
             {/* Business Analytics */}
             {isBusiness && (
@@ -349,7 +349,7 @@ export default function Sidebar({
               {/* Settings Accordion */}
               <div>
                 <button
-                  onClick={() => setSettingsOpen(o => !o)}
+                  onClick={() => {setSettingsOpen(o => !o); setSidebarMinimized(false);}}
                   className="flex justify-between w-full items-center px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
                 >
                   <div className="flex items-center gap-3 text-gray-800 dark:text-gray-200">
@@ -406,7 +406,7 @@ export default function Sidebar({
               {(isAdmin || isStaff || isModerator) && (
                 <div>
                   <button
-                    onClick={() => setModerationOpen(o => !o)}
+                    onClick={() => {setModerationOpen(o => !o); setSidebarMinimized(false);}}
                     className="flex justify-between w-full items-center px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium"
                   >
                     <div className="flex items-center gap-3 text-red-600">

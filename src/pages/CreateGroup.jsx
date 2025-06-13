@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createGroup } from '../requests';
 import { useNotification } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { CITIES } from '../../constants';
+import { useCity } from '../context/CityContext';
 
 export default function CreateGroup() {
   const [form, setForm] = useState({
@@ -18,6 +18,7 @@ export default function CreateGroup() {
   const [loading, setLoading] = useState(false);
   const [showInviteSection, setShowInviteSection] = useState(false);
   const { showNotification } = useNotification();
+  const { CITIES } = useCity();
   const navigate = useNavigate();
 
   const handleChange = (e) => {

@@ -1,51 +1,75 @@
 // src/pages/Inbox.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useRef,  useState, useEffect  } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
-import api from '../api';
-
-import {
-  fetchThreads,
-  fetchThread,
-  fetchPublicProfile,
-  editMessage,
-  deleteMessage,
-  reportMessage,
-  markMessageSeen,
-} from '../requests';
+import { Virtuoso } from 'react-virtuoso';
+import { sendReaction } from '../requests';
+import api from '../api';import {fetchThreads,fetchThread,fetchPublicProfile, editMessage, deleteMessage,reportMessage,markMessageSeen,} from '../requests';
 import { createWebSocket } from '../utils/websocket';
 import NewMessageModal from '../components/NewMessageModal';
-import { formatDistanceToNow, parseISO, isToday, isYesterday } from 'date-fns';
-import {
-  Search,
-  Plus,
-  ArrowLeft,
-  Edit2,
-  Trash2,
-  Check,
-  X,
-  Flag,
-  MessageCircle,
-  Eye,
-} from 'lucide-react';
+import { formatDistanceToNow, parseISO, isToday, isYesterday, isValid } from 'date-fns';
+import {Search,Plus,ArrowLeft,Edit2,Trash2,Check,X,Flag,MessageCircle,Eye, ThumbsUp, Paperclip, Loader} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import BidForm from '../components/BidForm';
+import MarkSoldModal from '../components/MarkSoldModal';
+import BidList from '../components/BidList';
+import ReportModal from '../components/ReportModal';
+
+
 
 /**
  * Group an array of messages into “Today” / “Yesterday” / date string.
  */
-function groupByDate(messages) {
-  return messages.reduce((acc, m) => {
-    const d = parseISO(m.sent_at);
-    const day = isToday(d)
-      ? 'Today'
-      : isYesterday(d)
+function groupByDate(items = []) {
+  return items.reduce((acc, n) => {
+    // 1) pick your date field (notifications use created_at)
+    const rawDate = n.sent_at ?? n.timestamp ?? n.date;
+
+   // 2) if it's missing, bucket under "Unknown"
+    if (!rawDate) {
+      (acc['Unknown'] ||= []).push(n);
+      return acc;
+    }
+
+    // 3) try/catch parseISO so bad strings don’t crash
+    let parsed;
+   try {
+      parsed = parseISO(rawDate);
+    } catch {
+      (acc['Unknown'] ||= []).push(n);
+     return acc;
+    }
+
+    // 4) if parseISO gives an invalid date, treat as unknown
+    if (!isValid(parsed)) {
+      (acc['Unknown'] ||= []).push(n);
+      return acc;
+    }
+
+    // 5) now group into Today / Yesterday / full date
+    const day = isToday(parsed)
+     ? 'Today'
+      : isYesterday(parsed)
       ? 'Yesterday'
-      : d.toLocaleDateString();
-    (acc[day] ||= []).push(m);
+      : parsed.toLocaleDateString();
+
+    (acc[day] ||= []).push(n);
     return acc;
   }, {});
+}
+
+
+
+function buildVirtualItems(messages) {
+  const grouped = groupByDate(messages);
+  const items = [];
+  Object.entries(grouped).forEach(([day, msgs]) => {
+    items.push({ type: 'header', label: day });
+    msgs.forEach(m => items.push({ type: 'message', data: m }));
+  });
+  return items;
 }
 
 /**
@@ -56,44 +80,172 @@ function isImageUrl(url) {
 }
 
 export default function Inbox({ setSidebarMinimized }) {
+  const [isDragging, setIsDragging] = useState(false);
   const wsRef = useRef(null);
+  const [wsReady, setWsReady] = useState(false);
+  const[messageId, setMessageId] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const inboxMessagesRef = useRef(null);
   const typingTimeout = useRef(null);
 
+  const [reportOpen, setReportOpen] = useState(false);
   const { user: currentUser } = useAuth();
   const { showNotification } = useNotification();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [threadsPage, setThreadsPage] = useState({
+    results: [], next: null, previous: null, count: 0
+  });
+  const [isLoadingMoreThreads, setIsLoadingMoreThreads] = useState(false);
   const autoOpenUserId = searchParams.get('to');
   const autoConvoId = searchParams.get('conversation');
-
   // ─ Threads & messages state
-  const [threads, setThreads] = useState([]);
   const [filteredThreads, setFilteredThreads] = useState([]);
   const [activeThread, setActiveThread] = useState(null);
   const [messages, setMessages] = useState([]);
+  const virtualItems = React.useMemo(
+  () => buildVirtualItems(messages),
+  [messages]
+);
+// Block of code doesnt work as expected so an after thought for now it links to the search box also commendted btw
+// const [searchMessages, setSearchMessages] = useState('');
+// const filteredMessages = React.useMemo(() => {
+//   if (!searchMessages.trim()) return messages;
+//   return messages.filter(m =>
+//     m.content.toLowerCase().includes(searchMessages.toLowerCase())
+//   );
+// }, [messages, searchMessages]);
+// const virtualItems = React.useMemo(
+//   () => buildVirtualItems(filteredMessages),
+//   [filteredMessages]
+// );
+/**
+ * Returns a stable key for any given thread, so we can
+ * stash per‐thread drafts in localStorage under "draft_<key>".
+ */
+function getThreadKey(thread) {
+  if (!thread || !thread.type) return '';
+
+  switch (thread.type) {
+    case 'direct':
+      // `thread.user` is the "other" user in a DM
+      return `direct-${thread.user.id}`;
+
+    case 'marketplace':
+      // `conversation_id` is unique per marketplace convo
+      return `marketplace-${thread.conversation_id}`;
+
+    case 'group':
+      // if you have group chats, use their id
+      return `group-${thread.group.id}`;
+
+    default:
+      // fallback to the raw thread.id if you have one
+      return `thread-${thread.id ?? ''}`;
+  }
+}
+const messagesRef = useRef(null);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  async function loadThreadsPage(url = 'messages/threads/') {
+    setIsLoadingMoreThreads(true);
+    try {
+      const page = await fetchThreads(url, { page_size: 20 });
+            // ── 1) normalize each thread into a common shape ───────────────────
+    const normalized = page.results.map(t => ({
+      ...t,
+      // for direct: API returns "user"; for marketplace: it returns "other_user"
+      other_user: t.type === 'direct' ? t.user : t.other_user,
+      // bring profile image into a single field
+      avatar: t.type === 'direct'
+        ? t.user.profile_image
+        : t.item_thumbnail,
+      // display name: username vs. item title
+      display_name: t.type === 'direct'
+        ? t.user.username
+        : t.type === 'marketplace'
+          ? t.item_title
+          : t.group.name,
+    }));
+    setThreadsPage(prev => ({
+      results: normalized,         // now hold your normalized array
+      next:    page.next,
+      previous: page.previous,
+      count:   page.count,
+    }));
+      return page;
+    } finally {
+      setIsLoadingMoreThreads(false);
+    }
+  }
+      async function loadMessagesPage(url = null) {
+        setIsLoadingMoreMessages(true);
+        try {
+              const otherId = activeThread.type === 'direct'
+      // direct → the thread.user is the other person
+      ? activeThread.user.id
+      // marketplace → the thread.other_user is the other person
+      : activeThread.other_user.id;
 
+   // now fetch using the right user ID
+    const page = await fetchThread(
+      otherId,
+      { conversation: activeThread.conversation_id, url }
+    );
+          // prepend or replace
+          setMessagesPage(prev => ({
+            results: url
+              ? [...page.results, ...prev.results]
+              : [...page.results],
+            next: page.next,
+          }));
+          // map into your messages shape
+          const mapped = page.results.map(m => ({
+            id:              m.id,
+            content:         m.content,
+            sender_id:       m.sender_id,
+            recipient_id:    m.recipient_id,
+            message_type:    m.message_type,
+            sent_at:         m.sent_at,
+            is_read:         m.is_read,
+            is_deleted:      m.is_deleted,
+            attachment_url:  m.attachment_url,
+            edited_at:       m.edited_at,
+            isModerator:     m.is_moderator_message,
+            reactions_summary: m.reactions_summary,
+            user_reactions:    m.user_reactions,
+            subject:           m.subject,
+            is_own: String(m.sender_id) === String(currentUser.id),
+          }));
+          setMessages(prev => url ? [...mapped, ...prev] : mapped);
+        } finally {
+          setIsLoadingMoreMessages(false);
+        }
+      }
+  async function handleReact(messageId, emoji) {
+    try {
+      await sendReaction('message_id', messageId, emoji);
+      // the WS “reaction” broadcast will update the UI automatically
+    } catch {
+      showNotification('Could not add reaction','error');
+    }
+  }
   // ─ Typing indicator
   const [isTyping, setIsTyping] = useState(false);
   const [hasSentTypingTrue, setHasSentTypingTrue] = useState(false);
   // We'll disable typing events until user starts typing:
-  const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const messageListRef = useRef(null);
 
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
   // ─ “Contacts Pane” toggle on mobile (<768px)
   const [showContacts, setShowContacts] = useState(true);
-
   // ─ Composer
   const [content, setContent] = useState('');
   const [attachmentFile, setAttachmentFile] = useState(null);
-
   // ─ “New Message” modal
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
-
   // ─ Search inside threads
   const [searchThreads, setSearchThreads] = useState('');
-
   // ─ Edit mode state
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
@@ -102,69 +254,91 @@ export default function Inbox({ setSidebarMinimized }) {
   const [showPlaceBidModal, setShowPlaceBidModal] = useState(false);
   const [showSeeBidsModal, setShowSeeBidsModal] = useState(false);
   const [showMarkSoldModal, setShowMarkSoldModal] = useState(false);
+  const [messagesPage, setMessagesPage] = useState({ results: [], next: null });
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 1️⃣ Fetch threads initially (and auto-open if needed) :contentReference[oaicite:0]{index=0}
-  useEffect(() => {
-    let cancelled = false;
+  function extractUrl(text) {
+  const m = text.match(/https?:\/\/\S+/);
+  return m ? m[0] : null;
+}
 
-    async function loadThreads() {
+// 1️⃣ Fetch threads initially (and auto-open if needed)
+    useEffect(() => {
+      let cancelled = false;
       setLoadingThreads(true);
-      setSidebarMinimized(true);
-      try {
-        const list = await fetchThreads();
-        if (cancelled) return;
-        setThreads(list);
-        setFilteredThreads(list);
 
-        // Auto-open marketplace thread if conversation ID is in URL
+      async function init() {
+        const page = await loadThreadsPage();
+        if (cancelled) return;
+
+        // — now your same auto-open logic, but against threadsPage.results —
         if (autoConvoId) {
-          const t = list.find(
-            (t) =>
-              t.type === 'marketplace' &&
-              String(t.conversation_id) === String(autoConvoId)
+          const t = page.results.find(
+            t => t.type === 'marketplace'
+              && String(t.conversation_id) === String(autoConvoId)
           );
-          if (t) {
-            setActiveThread(t);
-            setShowContacts(false);
-            return;
-          }
+          if (t) { setActiveThread(t); setShowContacts(false); return; }
         }
-        // Auto-open direct DM if "to" user ID in URL
         if (autoOpenUserId) {
-          let t = list.find(
-            (t) => t.type === 'direct' && String(t.user.id) === String(autoOpenUserId)
+          let t = page.results.find(
+            t => t.type === 'direct'
+              && String(t.user.id) === String(autoOpenUserId)
           );
           if (!t) {
             const u = await fetchPublicProfile(autoOpenUserId);
-            t = {
-              type: 'direct',
-              user: u,
-              last_message: '',
-              last_message_time: new Date().toISOString(),
-              unread_count: 0,
-            };
+            t = { type:'direct', user:u, last_message:'', last_message_time:new Date().toISOString(), unread_count:0 };
           }
           setActiveThread(t);
           setShowContacts(false);
         }
-      } catch {
-        // ignore
-      } finally {
-        if (!cancelled) setLoadingThreads(false);
       }
-    }
 
-    loadThreads();
-    return () => {
-      cancelled = true;
-    };
-  }, [autoOpenUserId, autoConvoId, setSidebarMinimized]);
+      init()
+        .catch(console.error)
+        .finally(() => { if (!cancelled) setLoadingThreads(false); });
+
+      return () => { cancelled = true; };
+    }, [autoOpenUserId, autoConvoId, setSidebarMinimized]);
+
+      // ── 1️⃣ Auto‐scroll to bottom on thread switch ───────────────────────
+      useEffect(() => {
+        if (!activeThread) return;
+
+        const list = messageListRef.current;
+          if (!list) return;
+
+          // recompute all sizes before scrolling
+          list.resetAfterIndex(0, false);
+
+          // compute final index (accounting for “load earlier” at index 0)
+          const lastIndex =
+            virtualItems.length - 1 + (messagesPage.next ? 1 : 0);
+
+          // scroll once the new layout is painted
+          requestAnimationFrame(() => {
+            list.scrollToItem(lastIndex, 'end');
+          });
+  }, [activeThread, virtualItems.length, messagesPage.next]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 2️⃣ Filter “threads” list as user types :contentReference[oaicite:1]{index=1}
   useEffect(() => {
-    const filtered = threads.filter((t) => {
+    // first dedupe by a stable key
+   const uniqueThreads = Array.from(
+     new Map(
+       threadsPage.results.map(t => {
+         const key =
+           t.type === 'direct'
+             ? `direct-${t.user.id}`
+             : t.type === 'marketplace'
+             ? `mp-${t.conversation_id}`
+             : `group-${t.group.id}`;
+         return [key, t];
+       })
+     ).values()
+   );
+   // now filter
+   const filtered = uniqueThreads.filter(t => {
       let name;
       if (t.type === 'direct') {
         name = t.user.username;
@@ -176,12 +350,12 @@ export default function Inbox({ setSidebarMinimized }) {
       return name.toLowerCase().includes(searchThreads.toLowerCase());
     });
     setFilteredThreads(filtered);
-  }, [searchThreads, threads]);
+  }, [searchThreads, threadsPage.results]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 3️⃣ Fetch messages + connect WebSocket on thread select :contentReference[oaicite:2]{index=2}
   useEffect(() => {
-    if (!activeThread) return;
+    if (!activeThread || !currentUser?.id) return;
     let cancelled = false;
     setLoadingMessages(true);
     setContent('');
@@ -189,88 +363,48 @@ export default function Inbox({ setSidebarMinimized }) {
     setUserHasInteracted(false); // Reset interaction flag so prefill won't trigger typing
 
     async function loadMessagesAndConnect() {
-      try {
-        let raw;
-        // ── Direct DM ──
-        if (activeThread.type === 'direct') {
-          raw = await fetchThread(activeThread.user.id);
-          const mapped = raw.map((msg) => ({
-            id: msg.id,
-            content: msg.content,
-            message_type: msg.message_type,
-            sender_id: msg.sender_id,
-            recipient_id: msg.recipient_id,
-            is_read: msg.is_read,
-            attachment_url: msg.attachment_url,
-            edited_at: msg.edited_at,
-            is_deleted: msg.is_deleted,
-            sent_at: msg.sent_at,
-            is_own: String(msg.sender_id) === String(currentUser.id),
-            isModerator: msg.is_moderator_message,
-            subject: msg.subject || '',
-          }));
-          if (!cancelled) setMessages(mapped);
-          // No prefill for direct
-        }
-        // ── Marketplace thread ──
-        else if (activeThread.type === 'marketplace') {
-          raw = await fetchThread(activeThread.other_user.id, {
-            conversation: activeThread.conversation_id,
-          });
-          const mapped = raw.map((msg) => ({
-            id: msg.id,
-            content: msg.content,
-            message_type: msg.message_type,
-            sender_id: msg.sender_id,
-            recipient_id: msg.recipient_id,
-            is_read: msg.is_read,
-            attachment_url: msg.attachment_url,
-            edited_at: msg.edited_at,
-            is_deleted: msg.is_deleted,
-            sent_at: msg.sent_at,
-            is_own: String(msg.sender_id) === String(currentUser.id),
-            isModerator: msg.is_moderator_message,
-            subject: msg.subject || '',
-          }));
-          if (!cancelled) setMessages(mapped);
-
-          // Prefill if no messages
-          if (mapped.length === 0) {
-            setContent('Hi, is this item still available?');
-            // We do NOT send a typing event for this prefill; wait until user edits.
-          }
-        }
-        // ── Group chat (if used) ──
-        else {
-          navigate(`/group-chat/${activeThread.group.id}`);
-          return;
+      
+              // ── 1) Load messages (errors here no longer block the socket)
+        try {
+          setMessagesPage({ results: [], next: null });
+          await loadMessagesPage();
+        } catch (err) {
+        console.error('Failed to load messages:', err);
+        } finally {
+          if (!cancelled) setLoadingMessages(false);
         }
 
-        // Clean up any existing socket
-        if (wsRef.current) {
-          wsRef.current.close();
-        }
-
-        // Build WebSocket channel key
-        const token = localStorage.getItem('accessToken');
-        const otherId =
-          activeThread.type === 'direct'
-            ? activeThread.user.id
-            : activeThread.other_user.id;
+        // ── 2) Open WebSocket channel
+        if (wsRef.current) wsRef.current.close();
+        const token   = localStorage.getItem('accessToken');
+        const otherId = activeThread.type === 'direct'
+          ? activeThread.user.id
+          : activeThread.other_user.id;
         const sortedIds = [currentUser.id, otherId]
           .map((id) => String(id))
           .sort((a, b) => (a < b ? -1 : 1));
-        const chatKey = `${sortedIds[0]}_${sortedIds[1]}`;
-        const socket = createWebSocket(`/ws/chat/${chatKey}/`, token);
-        wsRef.current = socket;
+       const chatKey = `${sortedIds[0]}_${sortedIds[1]}`;
+          const socket = createWebSocket(`/ws/chat/${chatKey}/`, token);
+      wsRef.current = socket;
+
+      // 2a) Track ready state for the Send button:
+      socket.onopen = () => {
+        setWsReady(true);
+      };
+      socket.onerror = (e) => {
+        setWsReady(false);
+      };
+      socket.onclose = (e) => {
+        setWsReady(false);
+      };
 
         socket.onmessage = (e) => {
           const data = JSON.parse(e.data);
           // New chat message
-          if (data.message_id) {
+          if (data.message_id && data.type === "message.new") {
             const incoming = {
               id: data.message_id,
-              content: data.message,
+              content: data.content,
               message_type: data.message_type,
               sender_id: data.sender_id,
               recipient_id: data.recipient_id,
@@ -282,6 +416,8 @@ export default function Inbox({ setSidebarMinimized }) {
               is_own: String(data.sender_id) === String(currentUser.id),
               isModerator: data.is_moderator_message || false,
               subject: data.subject || '',
+              reactions_summary: data.reactions_summary || [],
+              user_reactions:    data.user_reactions    || [],
             };
             setMessages((prev) => {
               if (incoming.is_own) {
@@ -316,9 +452,24 @@ export default function Inbox({ setSidebarMinimized }) {
                 String(m.id) === String(data.message_id)
                   ? { ...m, is_deleted: true }
                   : m
-              )
-            );
-          }
+              )            )                      }
+          else if (data.event === 'reaction') {
+            setMessages(prev =>
+              prev.map(m => {
+                if (String(m.id) !== String(data.messageId)) return m;
+                // bump summary count
+                const summary = [...(m.reactions_summary||[])];
+                const idx = summary.findIndex(r=>r.emoji===data.emoji);
+                if (idx > -1) summary[idx].count += 1;
+                else summary.push({emoji:data.emoji,count:1});
+                // add to your own reactions if it’s you
+                const userReacts = data.userId===currentUser.id
+                  ? [...(m.user_reactions||[]), data.emoji]
+                  : m.user_reactions;
+                return { ...m, reactions_summary:summary, user_reactions:userReacts };
+              }))
+            }
+    
         };
         socket.onclose = () => {};
         socket.onerror = (err) => console.error('WebSocket error:', err);
@@ -327,25 +478,16 @@ export default function Inbox({ setSidebarMinimized }) {
         setTimeout(() => {
           if (!cancelled) {
             messages.forEach((m) => {
-              if (!m.is_own && m.is_read === false) {
+              if (
+                m.recipient_id === currentUser.id &&   // I’m actually the recipient
+                !m.is_read
+              ) {
                 markMessageSeen(m.id).catch(() => {});
               }
             });
           }
         }, 200);
 
-        // Scroll to bottom
-        setTimeout(() => {
-          inboxMessagesRef.current?.scrollTo(
-            0,
-            inboxMessagesRef.current.scrollHeight
-          );
-        }, 50);
-      } catch {
-        // ignore
-      } finally {
-        if (!cancelled) setLoadingMessages(false);
-      }
     }
 
     loadMessagesAndConnect();
@@ -353,118 +495,149 @@ export default function Inbox({ setSidebarMinimized }) {
       cancelled = true;
       if (wsRef.current) wsRef.current.close();
     };
-  }, [activeThread]);
+  }, [activeThread, currentUser.id]);
+
+  
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 4️⃣ Always scroll to bottom whenever messages (or typing) change :contentReference[oaicite:3]{index=3}
   useEffect(() => {
-    if (inboxMessagesRef.current) {
-      inboxMessagesRef.current.scrollTo(
-        0,
-        inboxMessagesRef.current.scrollHeight
-      );
-    }
-  }, [messages, isTyping]);
+    const list = messageListRef.current;
+    if (!list) return;
+
+    // force re‐layout with any newly measured rows
+    list.resetAfterIndex(0, false);
+
+    // compute final index
+    const lastIndex = messagesPage.next
+      ? virtualItems.length
+      : virtualItems.length - 1;
+
+    // and scroll on next frame
+    requestAnimationFrame(() => {
+      list.scrollToItem(lastIndex, 'end');
+    });
+  }, [virtualItems.length, isTyping, messagesPage.next]);
+
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 5️⃣ Send a message or upload an attachment :contentReference[oaicite:4]{index=4}
-  const handleSendOrUpload = async () => {
-    // If user picked a file, do a REST upload first
-    if (attachmentFile) {
-      const formData = new FormData();
-      formData.append(
-        'recipient',
-        activeThread.type === 'direct'
-          ? activeThread.user.id
-          : activeThread.other_user.id
-      );
-      formData.append('conversation', activeThread.conversation_id || '');
-      formData.append('content', content);
-      formData.append('attachment_file', attachmentFile);
+// ── Updated handleSendOrUpload ────────────────────────────────────────────
+const handleSendOrUpload = async () => {
+  // 1) Attachment path: show spinner
+  if (attachmentFile) {
+    setIsUploading(true);
+    const previewUrl = URL.createObjectURL(attachmentFile);
+    // build form
+    const formData = new FormData();
+    formData.append(
+      'recipient',
+      activeThread.type === 'direct'
+        ? activeThread.user.id
+        : activeThread.other_user.id
+    );
+    formData.append('conversation', activeThread.conversation_id || '');
+    formData.append('content', content);
+    formData.append('attachment_file', attachmentFile);
 
-      try {
-        const resp = await api.post(
-          '/messages/upload/',
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-            },
-          }
-        );
-        const newMsg = resp.data;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: newMsg.id,
-            content: newMsg.content,
-            message_type: newMsg.message_type,
-            sender_id: newMsg.sender_id,
-            recipient_id: newMsg.recipient_id,
-            is_read: newMsg.is_read,
-            attachment_url: newMsg.attachment_url,
-            edited_at: newMsg.edited_at,
-            is_deleted: newMsg.is_deleted,
-            sent_at: newMsg.sent_at,
-            is_own: true,
-            isModerator: newMsg.is_moderator_message,
-            subject: newMsg.subject,
+    try {
+      const resp = await api.post(
+        '/messages/upload/',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
           },
-        ]);
-      } catch (err) {
-        console.error('Upload failed', err);
-        alert('Failed to send attachment.');
-      } finally {
-        setContent('');
-        setAttachmentFile(null);
-        setUserHasInteracted(false);
-      }
-    }
-    // Otherwise, send a text-only message via WebSocket
-    else if (content.trim()) {
-      // Create a temp message
-      const tempMsg = {
-        id: `temp-${Date.now()}`,
-        content,
-        message_type: 'user',
-        sender_id: currentUser.id,
-        recipient_id:
-          activeThread.type === 'direct'
-            ? activeThread.user.id
-            : activeThread.other_user.id,
-        is_read: true,
-        attachment_url: null,
-        edited_at: null,
-        is_deleted: false,
-        sent_at: new Date().toISOString(),
-        is_own: true,
-        isModerator: false,
-        subject: '',
-      };
-      setMessages((prev) => [...prev, tempMsg]);
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            command: 'new_message',
-            toUserId:
-              activeThread.type === 'direct'
-                ? activeThread.user.id
-                : activeThread.other_user.id,
-            content: content,
-            conversationId:
-              activeThread.type === 'marketplace'
-                ? activeThread.conversation_id
-                : undefined,
-            message_type: 'user',
-          })
-        );
-      }
+        }
+      );
+      const newMsg = resp.data;
+      // append the fully‐populated message returned by your REST endpoint
+      setMessages(prev => [
+        ...prev,
+        {
+          id:                 newMsg.id,
+          content:            newMsg.content,
+          message_type:       newMsg.message_type,
+          sender_id:          newMsg.sender_id,
+          recipient_id:       newMsg.recipient_id,
+          is_read:            newMsg.is_read,
+          attachment_url:     newMsg.attachment_url,
+          edited_at:          newMsg.edited_at,
+          is_deleted:         newMsg.is_deleted,
+          sent_at:            newMsg.sent_at,
+          is_own:             true,
+          isModerator:        newMsg.is_moderator_message,
+          reactions_summary:  [],
+          user_reactions:     [],
+          subject:            newMsg.subject,
+        },
+      ]);
+    } catch (err) {
+      console.error('Upload failed', err);
+      alert('Failed to send attachment.');
+    } finally {
+      // always clean up spinner & preview state
+      URL.revokeObjectURL(previewUrl);
+      setIsUploading(false);
       setContent('');
+      setAttachmentFile(null);
       setUserHasInteracted(false);
     }
-  };
+  }
+  // 2) Text‐only path: WebSocket
+  else if (content.trim()) {
+    // Optimistically render a temp message
+    const tempMsg = {
+      id:            `temp-${Date.now()}`,
+      content,
+      message_type:  'user',
+      sender_id:     currentUser.id,
+      recipient_id:
+        activeThread.type === 'direct'
+          ? activeThread.user.id
+          : activeThread.other_user.id,
+      is_read:       true,
+      attachment_url: null,
+      edited_at:     null,
+      is_deleted:    false,
+      sent_at:       new Date().toISOString(),
+      is_own:        true,
+      isModerator:   false,
+      subject:       '',
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
+    // send over WS if ready
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          command: 'new_message',
+          toUserId:
+            activeThread.type === 'direct'
+              ? activeThread.user.id
+              : activeThread.other_user.id,
+          content,
+          conversationId:
+            activeThread.type === 'marketplace'
+              ? activeThread.conversation_id
+              : undefined,
+          message_type: 'user',
+        })
+      );
+    } else {
+      console.warn(
+        'Attempted to send before WS was open – message still queued locally.'
+      );
+    }
+    // clear the composer
+    setContent('');
+    setUserHasInteracted(false);
+  }
+  if (!attachmentFile) {
+    localStorage.removeItem(`draft_${getThreadKey(activeThread)}`);
+  }
+};
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 6️⃣ Typing indicator (only after actual user input) :contentReference[oaicite:5]{index=5}
@@ -560,23 +733,111 @@ export default function Inbox({ setSidebarMinimized }) {
   };
 
   const handleReport = async (msgId) => {
-    if (!window.confirm('Report this message?')) return;
-    try {
-      await reportMessage(msgId);
-      alert('Message reported to moderation.');
-    } catch {
-      console.error('Report failed');
-      alert('Failed to report message.');
-    }
+    setMessageId(msgId);
+    setReportOpen(true);
+    
   };
 
+  
+    // create a debounced save function
+    const saveDraft = useDebouncedCallback((key, text) => {
+      if (text.trim()) {
+        localStorage.setItem(key, text);
+      } else {
+        localStorage.removeItem(key);
+      }
+    }, 500);
+
+    // on content or thread change, load or queue save:
+ useEffect(() => {
+   if (!activeThread) return;
+   const key = `draft_${getThreadKey(activeThread)}`;
+   const existing = localStorage.getItem(key);
+   // on thread switch, immediately populate (or clear) the composer
+   setContent(existing ?? '');
+ }, [activeThread]);
+
+ useEffect(() => {
+   if (!activeThread) return;
+
+  const key = `draft_${getThreadKey(activeThread)}`;
+   // every time content changes, schedule (debounced) save or removal
+   saveDraft(key, content);
+ }, [content, activeThread, saveDraft]);
   // Group messages by date
   const grouped = groupByDate(messages);
 
+  async function selectThread(thread) {
+  setActiveThread(thread);
+  setLoadingMessages(true);
+  setMessages([]);           // clear UI immediately
+  try {
+    
+       const { results } = await fetchThread(
+     thread.type==='direct' ? thread.user.id : thread.other_user.id,
+     thread.type==='marketplace' ? { conversation: thread.conversation_id } : {}
+   );
+    const mapped = results.map(msg => ({
+      id:               msg.id,
+      content:          msg.content,
+      message_type:     msg.message_type,
+      sender_id:        msg.sender_id,
+      recipient_id:     msg.recipient_id,
+      is_read:          msg.is_read,
+      attachment_url:   msg.attachment_url,
+      edited_at:        msg.edited_at,
+      is_deleted:       msg.is_deleted,
+      sent_at:          msg.sent_at,
+      is_own:           String(msg.sender_id) === String(currentUser.id),
+      isModerator:      msg.is_moderator_message,
+      subject:          msg.subject || '',
+      reactions_summary: msg.reactions_summary  || [],
+      user_reactions:    msg.user_reactions    || [],
+    }));
+    setMessages(mapped);
+  } catch (err) {
+    console.error('Failed to fetch thread', err);
+    showNotification('Could not load messages for that thread','error');
+  } finally {
+    setLoadingMessages(false);
+  }
+  setShowContacts(false);
+}
+
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
+
+function formatFileSize(bytes) {
+  if (bytes >= 1024 * 1024) {
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  } else if (bytes >= 1024) {
+    return (bytes / 1024).toFixed(1) + ' KB';
+  }
+  return bytes + ' B';
+}
+
+ // only mark new incoming messages as “seen”
+ useEffect(() => {
+   // skip first render
+  if (!messagesRef.current) {
+     messagesRef.current = messages;
+     return;
+   }
+   // for each message now, if unread & not own, mark as seen
+   messages.forEach((m) => {
+     if (
+      m.recipient_id === currentUser.id &&   // I’m actually the recipient
+      !m.is_read
+    ) {
+      markMessageSeen(m.id).catch(() => {});
+    }
+   });
+   messagesRef.current = messages;
+ }, [messages]);
+
   return (
-    <div className="h-[80vh] flex flex-col md:px-6 py-4">
+    <div className="h-[80vh] w-full flex flex-col md:flex-row md:px-6 py-4">
       {/* Chat container */}
-      <div className="max-w-5xl mx-auto flex-1 bg-gray-800 dark:bg-gray-900 rounded-2xl overflow-hidden shadow-lg">
+      <div className="max-w-7xl mx-auto flex-1 bg-gray-800 dark:bg-gray-900 rounded-2xl overflow-hidden shadow-lg">
         <div className="h-full flex">
           {/* ─── Contacts Pane (Left) ────────────────────────────────────────────── */}
           <div
@@ -649,6 +910,7 @@ export default function Inbox({ setSidebarMinimized }) {
               ) : (
                 <ul className="px-2 space-y-1">
                   {filteredThreads.map((t) => {
+                    
                     let displayName, subtitle;
                     if (t.type === 'direct') {
                       displayName = t.user.username;
@@ -673,7 +935,7 @@ export default function Inbox({ setSidebarMinimized }) {
                       activeThread &&
                       t.type === activeThread.type &&
                       ((t.type === 'direct' &&
-                        activeThread.user?.id === t.user?.id) ||
+                        activeThread.buyer?.id === t.buyer?.id) ||
                         (t.type === 'marketplace' &&
                           String(activeThread.conversation_id) ===
                             String(t.conversation_id)) ||
@@ -701,10 +963,10 @@ export default function Inbox({ setSidebarMinimized }) {
                               ? 'bg-gray-700 border-l-4 border-blue-500'
                               : 'hover:bg-gray-700'
                           }
-                          transition-colors
+                          transition-colors 
                         `}
                       >
-                        <div className="flex items-center space-x-3 min-w-0">
+                        <div className="flex items-center space-x-3 min-w-0 max-w-[75%]">
                           <div
                             className={`
                               h-10 w-10 flex-shrink-0 rounded-full overflow-hidden
@@ -717,6 +979,8 @@ export default function Inbox({ setSidebarMinimized }) {
                           >
                             {t.type === 'direct' && t.user.profile_image ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 src={t.user.profile_image}
                                 alt={t.user.username}
                                 className="h-full w-full object-cover"
@@ -724,6 +988,8 @@ export default function Inbox({ setSidebarMinimized }) {
                             ) : t.type === 'marketplace' ? (
                               t.item_thumbnail ? (
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   src={t.item_thumbnail}
                                   alt={t.item_title}
                                   className="h-full w-full object-cover"
@@ -765,7 +1031,22 @@ export default function Inbox({ setSidebarMinimized }) {
           </div>
 
           {/* ─── Chat Pane (Right) ───────────────────────────────────────────────── */}
-          <div className="flex-1 flex flex-col w-full md:w-[45vw] lg:w-[50vw]">
+          <div   className={`
+    flex-1 flex flex-col min-h-0
+    w-full md:w-[50vw] lg:w-[70vw]
+    bg-white dark:bg-gray-900
+    ${isDragging ? 'ring-2 ring-blue-400' : ''}
+  `}
+        
+  onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+  onDragLeave={() => setIsDragging(false)}
+  onDrop={e => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) setAttachmentFile(file);
+  }}
+>
             {/* Mobile Chat Header */}
             <div
               className={`
@@ -810,11 +1091,13 @@ export default function Inbox({ setSidebarMinimized }) {
 
                 {/* ─── DESKTOP MARKETPLACE HEADER ────────────────── */}
                 {activeThread.type === 'marketplace' && (
-                  <div className="hidden md:flex items-center px-8 py-5 border-b border-blue-500 bg-blue-600 text-white">
+                  <div className="hidden md:flex items-center px-8 py-5 border-b border-blue-500 dark:text-white">
                     {/* Thumbnail */}
                     <div className="h-12 w-12 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
                       {activeThread.item_thumbnail ? (
                         <img
+                          loading="lazy"
+                          decoding="async"
                           src={activeThread.item_thumbnail}
                           alt={activeThread.item_title}
                           className="h-full w-full object-cover"
@@ -845,7 +1128,7 @@ export default function Inbox({ setSidebarMinimized }) {
                     </div>
                     <button
                       onClick={() =>
-                        navigate(`/marketplace/${activeThread.item}`)
+                        navigate(`/marketplace/${activeThread.item_id}`)
                       }
                       className="underline"
                     >
@@ -855,245 +1138,345 @@ export default function Inbox({ setSidebarMinimized }) {
                 )}
 
                 {/* ─── MESSAGE LIST ───────────────────────────────── */}
-                <div
-                  ref={inboxMessagesRef}
-                  className="flex-1 overflow-y-auto px-8 py-6 space-y-6 bg-gray-800 scrollbar-thin scrollbar-thumb-blue-500 scrollbar-track-transparent"
-                >
-                  {loadingMessages ? (
-                    <p className="text-center text-gray-400">Loading…</p>
-                  ) : Object.keys(grouped).length === 0 ? (
-                    <p className="text-center text-gray-400">
-                      No messages yet. Say hello!
-                    </p>
-                  ) : (
-                    Object.entries(grouped).map(([day, msgs]) => (
-                      <div key={day} className="space-y-4">
-                        <div className="sticky top-0 px-4 py-1 bg-gray-900 bg-opacity-85 text-center text-xs font-semibold text-gray-300 uppercase rounded">
-                          {day}
-                        </div>
-                        {msgs.map((m) => {
-                          const isOwner =
-                            Number(m.sender_id) === Number(currentUser.id);
-                          const isEditing = editingMessageId === m.id;
-                          const isDeleted = m.is_deleted;
-                          const isModerator = m.isModerator;
-                          const isSystem = m.message_type === 'system';
+                {/* ─── MESSAGE LIST ───────────────────────────────── */}
+    <div
+      ref={inboxMessagesRef}
+      className="flex-1 min-h-0 bg-white dark:bg-gray-900"
+    >
+      {loadingMessages ? (
+          <div className="h-full flex items-center justify-center">
+            <Loader className="w-8 h-8 text-gray-400 animate-spin" />
+          </div>
+      ) : virtualItems.length === 0 ? (
+        <p className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+          No messages yet. Say hello!
+        </p>
+      ) : (
+        <>
+    {/*         {/* ── Message‐search bar ───────────────────────────────────────────── *}
+    <div className="px-6 py-2 border-b border-gray-700 bg-gray-900">
+      <div className="relative text-gray-400">
+        <Search className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Search messages…"
+          value={searchMessages}
+          onChange={e => setSearchMessages(e.target.value)}
+          className="
+            w-full pl-12 pr-4 py-2
+            bg-gray-800 border border-gray-600 rounded-lg
+            text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500
+          "
+        />
+      </div>
+    </div> */}
+      <Virtuoso
+        style={{ height: '100%' }}
+        data={virtualItems}
+        initialTopMostItemIndex={virtualItems.length - 1}
+        // when the top is reached, load older messages
+        startReached={() => {
+          if (messagesPage.next) loadMessagesPage(messagesPage.next);
+        }}
+        // how many pixels of buffer to render above/below
+        overscan={200}
+        // always scroll to bottom on new messages
+        followOutput
+        // render a “Load earlier” header at the very top
+        components={{
+          Header: () =>
+            messagesPage.next ? (
+              <div
+                className="p-2 text-center text-gray-400 cursor-pointer"
+                onClick={() => loadMessagesPage(messagesPage.next)}
+              >
+                {isLoadingMoreMessages
+                  ? 'Loading earlier…'
+                  : 'Load earlier messages'}
+              </div>
+            ) : null,
+        }}
+        // how to render each item
+        itemContent={(index, item) => {
+          if (item.type === 'header') {
+            return (
+              <div className="sticky top-0 px-4 py-1 bg-gray-900 bg-opacity-85 text-center text-xs font-semibold text-gray-300 uppercase rounded">
+                {item.label}
+              </div>
+            );
+          }
+          // for message bubbles, you can extract your existing JSX
+          const m = item.data;
+          const isOwner = Number(m.sender_id) === Number(currentUser.id);
+          const isSystem = m.message_type === 'system';
+          
+            // Message bubble
+            const isEditing = editingMessageId === m.id;
+            const isDeleted = m.is_deleted;
+            const isModerator = m.isModerator;
 
-                          // Mark incoming as “seen” as soon as they render
-                          if (!m.is_own && m.is_read === false) {
-                            markMessageSeen(m.id).catch(() => {});
+
+            if (
+              m.recipient_id === currentUser.id &&   // I’m actually the recipient
+              !m.is_read
+            ) {
+              markMessageSeen(m.id).catch(() => {});
+            }
+    
+          return (
+            <div
+              key={m.id}
+              className={`flex w-full ${
+                isSystem
+                  ? 'justify-center'
+                  : isOwner
+                  ? 'justify-end'
+                  : 'justify-start'
+              } px-4 py-2`}
+            >
+              
+                {/* ─── SYSTEM BUBBLE ─────────────────────────── */}
+                {isSystem ? (
+                  <div className="max-w-[60%] bg-gray-600 text-gray-200 italic text-center px-4 py-2 rounded-lg">
+                    {m.content}
+                  </div>
+                ) : (
+                  /** ─── USER / MODERATOR BUBBLE ──────────── **/
+                  <div
+                    className={`
+                      ${isOwner ? 'ml-auto group' : ''} relative group
+                      max-w-[70%]
+                      ${
+                        isModerator
+                          ? 'bg-purple-600 text-white'
+                          : isOwner
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-slate-700 text-gray-100'
+                      }
+                      ${
+                        isDeleted
+                          ? 'opacity-50 italic'
+                          : 'opacity-100'
+                      }
+                      px-5 py-3
+                      transition-colors shadow-sm
+                      ${
+                        isModerator
+                          ? 'rounded-lg'
+                          : isOwner
+                          ? 'rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl'
+                          : 'rounded-tl-2xl rounded-tr-2xl rounded-br-2xl'
+                      }
+                    `}
+                  >
+                    {/* Attachment */}
+                    {m.attachment_url && (
+                      isImageUrl(m.attachment_url) ? (
+                        <img
+                          src={m.attachment_url}
+                            loading="lazy"
+                            decoding="async"
+                          className="mb-2 rounded max-h-40"
+                        />
+                      ) : (
+                        <a
+                          href={m.attachment_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mb-2 underline text-sm"
+                        >
+                          {m.attachment_url.split('/').pop()}
+                        </a>
+                      )
+                    )}
+
+                    {/* Edit mode / deleted */}
+                    {isDeleted ? (
+                      <p className="text-sm">
+                        This message was deleted
+                      </p>
+                    ) : isEditing ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          value={editingContent}
+                          onChange={e =>
+                            setEditingContent(e.target.value)
                           }
-
-                          return (
-                            <div
-                              key={m.id}
-                              className={`
-                                flex w-full 
-                                ${
-                                  isSystem
-                                    ? 'justify-center'
-                                    : isOwner
-                                    ? 'justify-end'
-                                    : 'justify-start'
-                                }
-                                px-4
-                              `}
-                            >
-                              {/** ─── SYSTEM BUBBLE ─────────────────────────── **/}
-                              {isSystem ? (
-                                <div className="max-w-[60%] bg-gray-600 text-gray-200 italic text-center px-4 py-2 rounded-lg">
-                                  {m.content}
-                                </div>
-                              ) : (
-                                /** ─── USER / MODERATOR BUBBLE ──────────── **/
-                                <div
-                                  className={`
-                                    ${isOwner ? 'ml-auto' : ''} relative group
-                                    max-w-[70%]
-                                    ${
-                                      isModerator
-                                        ? 'bg-purple-600 text-white'
-                                        : isOwner
-                                        ? 'bg-blue-500 text-white'
-                                        : 'bg-slate-700 text-gray-100'
-                                    }
-                                    ${isDeleted ? 'opacity-50 italic' : 'opacity-100'}
-                                    px-5 py-3
-                                    transition-colors shadow-sm
-                                    ${
-                                      isModerator
-                                        ? 'rounded-lg'
-                                        : isOwner
-                                        ? 'rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl'
-                                        : 'rounded-tl-2xl rounded-tr-2xl rounded-br-2xl'
-                                    }
-                                  `}
-                                >
-                                  {/** Attachment (if any) **/}
-                                  {m.attachment_url && isImageUrl(m.attachment_url) && (
-                                    <a
-                                      href={m.attachment_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block mb-2"
-                                    >
-                                      <img
-                                        src={m.attachment_url}
-                                        alt="attachment"
-                                        className="max-h-40 rounded"
-                                      />
-                                    </a>
-                                  )}
-                                  {m.attachment_url && !isImageUrl(m.attachment_url) && (
-                                    <a
-                                      href={m.attachment_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-block mb-2 text-sm underline"
-                                    >
-                                      Download Attachment
-                                    </a>
-                                  )}
-
-                                  {/** If in edit-mode **/}
-                                  {isDeleted ? (
-                                    <p className="text-sm">This message was deleted</p>
-                                  ) : isEditing ? (
-                                    <div className="flex items-center space-x-2">
-                                      <input
-                                        value={editingContent}
-                                        onChange={(e) =>
-                                          setEditingContent(e.target.value)
-                                        }
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            saveEdit(m.id);
-                                          } else if (e.key === 'Escape') {
-                                            cancelEditing();
-                                          }
-                                        }}
-                                        className="
-                                          flex-1 px-3 py-1
-                                          bg-slate-600 border border-slate-500
-                                          rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400
-                                          text-gray-100
-                                        "
-                                        type="text"
-                                        autoFocus
-                                      />
-                                      <button
-                                        onClick={() => saveEdit(m.id)}
-                                        className="p-1 text-green-400 hover:bg-slate-600 rounded transition"
-                                        type="button"
-                                      >
-                                        <Check className="w-5 h-5" />
-                                      </button>
-                                      <button
-                                        onClick={cancelEditing}
-                                        className="p-1 text-red-400 hover:bg-slate-600 rounded transition"
-                                        type="button"
-                                      >
-                                        <X className="w-5 h-5" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    /** Normal display **/ <>
-                                      {isModerator && m.subject && (
-                                        <div className="mb-1 text-sm font-semibold">
-                                          <MessageCircle className="inline w-4 h-4 mr-1" />
-                                          {m.subject}
-                                        </div>
-                                      )}
-                                      <p className="text-sm whitespace-pre-wrap break-words">
-                                        {m.content}
-                                      </p>
-                                      <div className="mt-1 flex items-center space-x-1 text-2xs">
-                                        <span
-                                          className={
-                                            isOwner
-                                              ? 'text-blue-100'
-                                              : isModerator
-                                              ? 'text-purple-100'
-                                              : 'text-gray-400'
-                                          }
-                                        >
-                                          {new Date(m.sent_at).toLocaleTimeString(
-                                            [],
-                                            { hour: 'numeric', minute: '2-digit' }
-                                          )}
-                                        </span>
-                                        {m.edited_at && (
-                                          <span className="text-gray-300">(edited)</span>
-                                        )}
-                                        {m.is_read && isOwner && (
-                                          <Eye className="w-4 h-4 text-gray-300 ml-1" />
-                                        )}
-                                      </div>
-                                    </>
-                                  )}
-
-                                  {/** Edit/Delete icons: your own, if user bubble **/}
-                                  {!isDeleted &&
-                                    !isEditing &&
-                                    isOwner &&
-                                    m.message_type === 'user' && (
-                                      <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                          onClick={() => startEditing(m)}
-                                          className="p-1 rounded hover:bg-slate-600 transition"
-                                          type="button"
-                                        >
-                                          <Edit2 className="w-4 h-4 text-white" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleDelete(m.id)}
-                                          className="p-1 rounded hover:bg-slate-600 transition"
-                                          type="button"
-                                        >
-                                          <Trash2 className="w-4 h-4 text-white" />
-                                        </button>
-                                      </div>
-                                    )}
-
-                                  {/** Report icon: incoming & not moderator **/}
-                                  {!isDeleted &&
-                                    !isOwner &&
-                                    !isModerator &&
-                                    m.message_type === 'user' && (
-                                      <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                          onClick={() => handleReport(m.id)}
-                                          className="p-1 rounded hover:bg-slate-600 transition"
-                                          type="button"
-                                        >
-                                          <Flag className="w-4 h-4 text-white" />
-                                        </button>
-                                      </div>
-                                    )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {isTyping && (
-                          <p className="text-sm text-gray-400 px-8">
-                            {activeThread.type === 'direct'
-                              ? activeThread.user.username
-                              : activeThread.other_user.username}{' '}
-                            is typing…
-                          </p>
-                        )}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              saveEdit(m.id);
+                            } else if (e.key === 'Escape') {
+                              cancelEditing();
+                            }
+                          }}
+                          className="
+                            flex-1 px-3 py-1
+                            bg-slate-600 border border-slate-500
+                            rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400
+                            text-gray-100
+                          "
+                          type="text"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => saveEdit(m.id)}
+                          className="p-1 text-green-400 hover:bg-slate-600 rounded transition"
+                          type="button"
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="p-1 text-red-400 hover:bg-slate-600 rounded transition"
+                          type="button"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                       </div>
-                    ))
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        {/* Moderator subject */}
+                        {isModerator && m.subject && (
+                          <div className="mb-1 text-sm font-semibold">
+                            <MessageCircle className="inline w-4 h-4 mr-1" />
+                            {m.subject}
+                          </div>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap break-words">
+                          {m.content}
+                        </p>
+                        {/* Auto-link preview */}
+                        {extractUrl(m.content) && (
+                          <div className="border rounded p-2 mt-2 hover:bg-gray-700 transition">
+                            <a
+                              href={extractUrl(m.content)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 truncate block"
+                            >
+                              {extractUrl(m.content)}
+                            </a>
+                          </div>
+                        )}
+                        <div className="mt-1 flex items-center space-x-1 text-2xs">
+                          <span
+                            className={
+                              isOwner
+                                ? 'text-blue-100'
+                                : isModerator
+                                ? 'text-purple-100'
+                                : 'text-gray-400'
+                            }
+                          >
+                            {new Date(m.sent_at).toLocaleTimeString(
+                              [],
+                              { hour: 'numeric', minute: '2-digit' }
+                            )}
+                          </span>
+                          {m.edited_at && (
+                            <span className="text-gray-300">
+                              (edited)
+                            </span>
+                          )}
+                        {isOwner && (
+                          m.is_read
+                            ? <Check className="w-4 h-4 text-blue-300 ml-1" />
+                            : <Check className="w-4 h-4 text-gray-500 ml-1" />
+                        )}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ─── Reactions UI ───────────────────────────── */}
+                    <div className="mt-2 flex items-center space-x-1">
+                      {(m.reactions_summary || []).map(r => (
+                        <button
+                          key={r.emoji}
+                          onClick={() => handleReact(m.id, r.emoji)}
+                          className={`
+                            flex items-center space-x-1 px-1 py-0.5 rounded
+                            ${
+                              (m.user_reactions || []).includes(r.emoji)
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                            }
+                            transition
+                          `}
+                        >
+                          <span>{r.emoji}</span>
+                          <span className="text-2xs">{r.count}</span>
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleReact(m.id, '👍')}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition"
+                      >
+                        <ThumbsUp size={14} />
+                      </button>
+                    </div>
+
+                    {/* Edit/Delete for own messages */}
+                    {!isDeleted &&
+                      !isEditing &&
+                      isOwner &&
+                      m.message_type === 'user' && (
+                        <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => startEditing(m)}
+                            className="p-1 rounded hover:bg-slate-600 transition"
+                            type="button"
+                          >
+                            <Edit2 className="w-4 h-4 text-white" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(m.id)}
+                            className="p-1 rounded hover:bg-slate-600 transition"
+                            type="button"
+                          >
+                            <Trash2 className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+                      )}
+
+                    {/* Report for incoming user messages */}
+                    {!isDeleted &&
+                      !isOwner &&
+                      !isModerator &&
+                      m.message_type === 'user' && (
+                        <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleReport(m.id)}
+                            className="p-1 rounded hover:bg-slate-600 transition"
+                            type="button"
+                          >
+                            <Flag className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+                      )}
+                  </div>
+                )}
+            </div>
+          );
+        }}
+      />
+     
+     </>
+  )}
+</div>
+
+{isTyping && (
+  <div className="px-8 py-2 text-sm italic text-gray-400">
+    {activeThread.type === 'direct'
+      ? `${activeThread.user.username} is typing…`
+      : 'Someone is typing…'}
+  </div>
+)}
 
                 {/* ─── MARKETPLACE QUICK-ACTIONS / COMPOSER ─────────────────────── */}
-                {activeThread.type === 'marketplace' && (
-                  <div className="bg-blue-600 text-white px-8 py-4 flex items-center justify-between space-x-4">
-                    {currentUser.id === activeThread.buyer.id &&
+                {activeThread.type === 'marketplace' && (activeThread.item_bidding || currentUser.id === activeThread.seller.id) && (
+                  <div className="dar:text-white px-4 py-2 flex items-center justify-between space-x-4">
+                    {currentUser.id === activeThread.buyer.id && activeThread.item_bidding &&
                       activeThread.item_status === 'available' && (
                         <button
                           onClick={() => setShowPlaceBidModal(true)}
@@ -1106,9 +1489,9 @@ export default function Inbox({ setSidebarMinimized }) {
                           Place Bid
                         </button>
                       )}
-                    {currentUser.id === activeThread.seller.id && (
+                    {currentUser.id === activeThread.seller.id &&  (
                       <>
-                        <button
+                        {activeThread.item_bidding && (<button
                           onClick={() => setShowSeeBidsModal(true)}
                           className="
                             bg-white text-blue-600 px-3 py-1 rounded-lg hover:bg-gray-100
@@ -1117,8 +1500,8 @@ export default function Inbox({ setSidebarMinimized }) {
                           type="button"
                         >
                           See Bids
-                        </button>
-                        {activeThread.item_status === 'available' && (
+                        </button>)}
+                        {currentUser.id === activeThread.seller.id && (
                           <button
                             onClick={() => setShowMarkSoldModal(true)}
                             className="
@@ -1132,20 +1515,83 @@ export default function Inbox({ setSidebarMinimized }) {
                         )}
                       </>
                     )}
-                    <button
-                      onClick={() =>
-                        navigate(`/marketplace/${activeThread.item}`)
-                      }
-                      className="
-                        underline text-sm hover:text-gray-200 transition
-                      "
-                    >
-                      View Item
-                    </button>
                   </div>
                 )}
 
                 {/* ─── COMPOSER ───────────────────────────────────────────────── */}
+                    {attachmentFile && (
+                        <div
+                          className="
+                            flex flex-col sm:flex-row sm:items-center
+                            p-3 mb-4 rounded-lg
+                            bg-gray-100 dark:bg-gray-800
+                            space-y-2 sm:space-y-0 sm:space-x-4
+                          "
+                        >
+                          {/* Thumbnail or PDF icon */}
+                          {isImageUrl(attachmentFile.name) ? (
+                            <img
+                              src={URL.createObjectURL(attachmentFile)}
+                              alt="Preview"
+                                loading="lazy"
+                                decoding="async"
+                              className="w-full sm:w-24 h-24 object-cover rounded"
+                            />
+                          ) : (
+                            <div
+                              className="
+                                flex items-center justify-center
+                                w-full sm:w-24 h-24
+                                bg-gray-200 dark:bg-gray-700
+                                rounded
+                              "
+                            >
+                              <Paperclip className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                            </div>
+                          )}
+
+                          {/* Name & size */}
+                          <div className="flex-grow min-w-0">
+                            <p
+                              className="
+                                text-sm font-medium truncate
+                                text-gray-900 dark:text-gray-100
+                              "
+                            >
+                              {attachmentFile.name}
+                            </p>
+                            <p
+                              className="
+                                text-xs truncate
+                                text-gray-500 dark:text-gray-400
+                              "
+                            >
+                              {formatFileSize(attachmentFile.size)}
+                            </p>
+                          </div>
+
+                          {/* Remove button or spinner */}
+                          <div className="flex-shrink-0">
+                            {isUploading ? (
+                              <Loader className="w-6 h-6 text-gray-500 dark:text-gray-400 animate-spin" />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setAttachmentFile(null)}
+                                className="
+                                  p-1 rounded-full
+                                  text-red-500 hover:text-red-400
+                                  bg-red-50 hover:bg-red-100
+                                  dark:bg-red-900 dark:hover:bg-red-800
+                                "
+                                aria-label="Remove attachment"
+                              >
+                                &times;
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                 <div
                   className={`
                     ${
@@ -1153,8 +1599,9 @@ export default function Inbox({ setSidebarMinimized }) {
                         ? 'bg-gray-900 border-t border-blue-500'
                         : 'bg-gray-900 border-t border-gray-700'
                     }
-                    px-8 py-4 flex items-end space-x-4
+                    px-8 py-4 flex items-end space-x-4 
                   `}
+                  style={{alignItems: 'center'}}
                 >
                   <textarea
                     rows={1}
@@ -1170,29 +1617,41 @@ export default function Inbox({ setSidebarMinimized }) {
                         handleSendOrUpload();
                       }
                     }}
-                    className="
-                      flex-1 px-4 py-3
-                      bg-gray-800
-                      border border-gray-700
-                      rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400
-                      text-gray-100 resize-none
-                    "
-                  />
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) => {
-                      setAttachmentFile(e.target.files[0]);
-                    }}
-                    className="text-sm text-gray-400"
-                  />
+                    className="     flex-1 px-4 py-3     bg-gray-800     border border-gray-700     rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400     text-gray-100 resize-none   " />
+                    {/*content.trim() && (
+                      <span className="absolute bottom-1 right-3 text-2xs text-gray-400 italic">
+                        Draft saved
+                      </span>
+                     )*/}
+                    <label className="relative inline-block">
+                        <Paperclip className="w-6 h-6 text-gray-400 hover:text-gray-200 cursor-pointer transition" />
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+     onChange={e => {
+       const file = e.target.files?.[0];
+       if (file) {
+         if (file.size > MAX_ATTACHMENT_SIZE) {
+           alert(`File too big. Maximum is ${formatFileSize(MAX_ATTACHMENT_SIZE)}.`);
+           e.target.value = null;
+           return;
+         }
+         setAttachmentFile(file);
+       }
+     }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </label>
                   <button
                     onClick={handleSendOrUpload}
-                    className="p-3 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-md transition"
+                    disabled={!wsReady}    
+                    title={!wsReady ? 'Connecting…' : 'Send'}
+                    className="p-3 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-md transition  cursor-pointer"
                     type="button"
                   >
-                    <Plus className="w-5 h-5" />
+                    <label className="cursor-pointer">Send</label>
                   </button>
+                    
                 </div>
               </>
             ) : (
@@ -1211,50 +1670,45 @@ export default function Inbox({ setSidebarMinimized }) {
       <NewMessageModal
         isOpen={showNewMessageModal}
         onClose={() => setShowNewMessageModal(false)}
-        onUserSelect={async (user) => {
-          const existingThread = threads.find(
-            (t) => t.type === 'direct' && t.user.id === user.id
-          );
-          if (existingThread) {
-            setActiveThread(existingThread);
-          } else {
-            const newThread = {
-              type: 'direct',
-              user,
-              last_message: '',
-              last_message_time: new Date().toISOString(),
-              unread_count: 0,
-            };
-            setThreads((prev) => [newThread, ...prev]);
-            setActiveThread(newThread);
-          }
-          setShowNewMessageModal(false);
-          navigate(`/inbox?to=${user.id}`);
-        }}
+         onUserSelect={async (user) => {
+   // check for an existing in the paginated list
+   let existing = threadsPage.results.find(
+     t => t.type==='direct' && t.user.id===user.id
+   );
+   if (!existing) {
+     existing = {
+       type: 'direct',
+       user,
+       last_message: '',
+       last_message_time: new Date().toISOString(),
+       unread_count: 0
+     };
+     // inject into page results
+     setThreadsPage(p => ({
+       ...p,
+       results: [existing, ...p.results]
+     }));
+   }
+   setActiveThread(existing);
+   setShowContacts(false);
+   navigate(`/inbox?to=${user.id}`);
+ }}
       />
 
       {/* ─── PLACE BID MODAL (stub) ───────────────────────────────────────────── */}
-      {showPlaceBidModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Place a Bid</h3>
-            <p>/* Implement your “Place Bid” form here */</p>
-            <button
-              onClick={() => setShowPlaceBidModal(false)}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {showPlaceBidModal && (<BidForm 
+      itemId={activeThread.id}
+          currentHighestBid={activeThread.highest_bid}
+          onBidSuccess={loadItem}
+          startBid={activeThread.starting_bid}
+           /> )}
 
       {/* ─── SEE BIDS MODAL (stub) ────────────────────────────────────────────── */}
-      {showSeeBidsModal && (
+            {showSeeBidsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-96">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96">
             <h3 className="text-lg font-semibold mb-4">All Bids</h3>
-            <p>/* Implement your “See Bids” list here */</p>
+            <p><BidList  itemId={activeThread.item_id} /></p>
             <button
               onClick={() => setShowSeeBidsModal(false)}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
@@ -1264,22 +1718,24 @@ export default function Inbox({ setSidebarMinimized }) {
           </div>
         </div>
       )}
+      
+      {reportOpen && <ReportModal
+              isOpen={reportOpen}
+              contentType="message"
+              contentId={messageId}
+              onClose={() => setReportOpen(false)}
+              onSuccess={() => {
+                setReportOpen(false);
+                setMessageId(null);
+                showNotification(
+                  'Thanks for reporting. Our team will review shortly.',
+                  'success'
+                );
+              }}
+            />}
 
       {/* ─── MARK SOLD MODAL (stub) ───────────────────────────────────────────── */}
-      {showMarkSoldModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Mark as Sold</h3>
-            <p>/* Implement your “Mark as Sold” confirmation here */</p>
-            <button
-              onClick={() => setShowMarkSoldModal(false)}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {showMarkSoldModal && <MarkSoldModal itemId={activeThread.item_id} onClose={() => setShowMarkSoldModal(false)}/>}
     </div>
   );
 }
