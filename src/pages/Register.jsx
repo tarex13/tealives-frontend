@@ -1,4 +1,5 @@
 // src/pages/Register.jsx
+// Not used
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { register } from '../requests'

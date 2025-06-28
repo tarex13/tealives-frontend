@@ -16,7 +16,8 @@ module.exports = {
         },
         colors: {
           slate: require('tailwindcss/colors').slate,
-        }
+        },
+        backgroundColor: ['hover', 'focus'],
     }
       },
     },

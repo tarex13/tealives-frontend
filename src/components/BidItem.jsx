@@ -1,8 +1,7 @@
-// src/components/BidItem.jsx
 import React from 'react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
-export default function BidItem({ bid, onAction }) {
+export default function BidItem({ bid, onAction, messageBuyer }) {
   const { bidder_username, amount, message, status, created_at } = bid;
 
   return (
@@ -40,22 +39,30 @@ export default function BidItem({ bid, onAction }) {
       </div>
 
       {/* Right Side: Action Buttons */}
-      {status === 'pending' && (
-        <div className="flex space-x-2">
-          <button
-            onClick={() => onAction('accept')}
-            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            Accept
-          </button>
-          <button
-            onClick={() => onAction('reject')}
-            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-          >
-            Reject
-          </button>
-        </div>
-      )}
+      <div className="flex space-x-2">
+        {status === 'pending' && (
+          <>
+            <button
+              onClick={() => onAction('accept')}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              Accept
+            </button>
+            <button
+              onClick={() => onAction('reject')}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              Reject
+            </button>
+          </>
+        )}
+        <button
+          onClick={messageBuyer}
+          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          Message Buyer
+        </button>
+      </div>
     </li>
   );
 }

@@ -27,6 +27,7 @@ const WORD_LIMIT = 100;
 export default function ReportModal({
   isOpen,
   onClose,
+  reportedUser,
   contentType, // e.g. 'post' | 'listing' | 'comment' | 'message'
   contentId,
   onSuccess,
@@ -96,6 +97,7 @@ export default function ReportModal({
     try {
       // POST to /reports/ (ReportCreateView)
       await api.post('/report/', {
+        reported_user: reportedUser ? reportedUser : null,
         content_type: contentType,
         content_id: contentId,
         reason: `${selectedReason}: ${trimmedReason}`,

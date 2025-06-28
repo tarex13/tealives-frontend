@@ -1,3 +1,4 @@
+{/**Not being used safely delete */}
 import apiClient from './apiClient';
 
 export const getPolls = () => 

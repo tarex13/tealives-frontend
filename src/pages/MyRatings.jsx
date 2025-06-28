@@ -1,3 +1,4 @@
+{/**Currently not being used */}
 // src/pages/MyRatings.jsx
 import React, { useEffect, useState } from 'react';
 import { createRating, fetchUserRatings } from '../requests';

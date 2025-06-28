@@ -4,10 +4,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   fetchMarketplaceItemDetail,
   toggleSaveListing,
-  getOrCreateConversation,
+  //getOrCreateConversation,
 } from '../requests';
 import { useAuth } from '../context/AuthContext';
 import BidForm from '../components/BidForm';
+import { Helmet } from 'react-helmet-async';
 import BidList from '../components/BidList';
 import MarketplaceCarousel from '../components/MarketplaceCarousel';
 import MarketplaceCard from './MarketplaceCard'; // we’ll still use its style for similar cards
@@ -67,9 +68,9 @@ export default function MarketplaceItemDetail() {
       return;
     }
     try {
-      const res = await getOrCreateConversation(item.id);
-      const convoId = res.data.conversation_id;
-      navigate(`/inbox?conversation=${convoId}&to=${item.seller.id}`);
+      //const res = await getOrCreateConversation(item.id);
+      //const convoId = res.data.conversation_id;
+      navigate(`/inbox?item=${item.id}&to=${item.seller.id}`);
     } catch (err) {
       console.error('Conversation error:', err);
       alert('Could not open chat with seller.');
@@ -98,6 +99,9 @@ export default function MarketplaceItemDetail() {
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 bg-white dark:bg-gray-900 rounded-lg shadow-lg space-y-6">
+      <Helmet>
+        <title>{item.title} on Tealives</title>
+      </Helmet>
       {/* ── Title & Save Button ───────────────────────────────────────────────── */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
@@ -108,7 +112,16 @@ export default function MarketplaceItemDetail() {
           className="text-2xl focus:outline-none"
           title={isSaved ? 'Unsave' : 'Save'}
         >
-          {isSaved ? '💖' : '🤍'}
+          <img
+              src={
+                isSaved
+                  ? '22.svg'
+                  : '21.svg'
+              }
+              alt={isSaved ? 'Unsave' : 'Save'}
+              className="w-6 h-6 -rotate-9"
+              loading="lazy"
+            />
         </button>
       </div>
 
@@ -245,10 +258,10 @@ export default function MarketplaceItemDetail() {
                     {item.delivery_note}
                   </p>
                 )}
-                <p>
+                {isSeller && <p>
                   <strong>Views: </strong>
                   {item.views_count}
-                </p>
+                </p>}
               </div>
             </div>
           </div>
@@ -289,7 +302,7 @@ export default function MarketplaceItemDetail() {
       )}
 
       {tab === 'bids' && isSeller && (
-        <BidList itemId={item.id} onActionSuccess={loadItem} />
+        <BidList itemId={item.id} messageBuyer={handleMessageSeller} onActionSuccess={loadItem} />
       )}
 
       {/* ── Similar Items “Peek” Carousel ───────────────────────────────────────── */}

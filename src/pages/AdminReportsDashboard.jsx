@@ -160,7 +160,7 @@ export default function AdminReportsDashboard() {
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      await api.patch(`/reports/${reportId}/`, { action: actionType });
+      await api.patch(`/report/${reportId}/`, { action: actionType });
       showNotification(`"${actionType}" successful.`, 'success');
       loadSummary();
       loadReports();
@@ -535,6 +535,7 @@ function ReportCard({
     content_snippet,
     priority_score,
     assigned_to,
+    status,
   } = report;
 
   // Determine display values with fallbacks
@@ -624,7 +625,7 @@ function ReportCard({
         {/* Assign to Me */}
         {!assigned_to && (
           <button
-            onClick={onAssign}
+            onClick={() => onAction(id, 'assign')}
             className="inline-flex items-center px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
           >
             <Users className="w-4 h-4 mr-1" />
@@ -639,6 +640,14 @@ function ReportCard({
             className="inline-flex items-center px-3 py-1 bg-gray-300 text-gray-500 rounded text-xs cursor-not-allowed"
           >
             In Review by @{assigned_to.username}
+          </button>
+        )}
+        {status == 'escalated' && (
+          <button
+            disabled
+            className="inline-flex items-center px-3 py-1 bg-gray-300 text-gray-500 rounded text-xs cursor-not-allowed"
+          >
+            Escalated
           </button>
         )}
 
@@ -725,7 +734,7 @@ function PreviewModal({ report, onClose }) {
             endpoint = `/marketplace/${report.content_id_read}/`;
             break;
           case 'message':
-            endpoint = `/messages/${report.content_id_read}/`;
+            endpoint = `/report/messages/${report.content_id_read}/`;
             break;
           case 'user':
             endpoint = `/users/${report.content_id_read}/`;
@@ -957,11 +966,17 @@ function MessageModal({ report, onClose, sendMessage }) {
       report.reported_by && report.reported_by.username
         ? report.reported_by.username
         : report.reported_by;
+    
+    const reportedUser =
+      report.reported_user && report.reported_user.username
+        ? report.reported_user.username
+        : report.reported_user;
+    
     subj = subj
-      .replace('{{username}}', reporterName)
+      .replace('{{username}}', reportedUser)
       .replace('{{content_id}}', report.content_id_read);
     body = body
-      .replace(/{{username}}/g, reporterName)
+      .replace(/{{username}}/g, reportedUser)
       .replace(/{{content_id}}/g, report.content_id_read);
     setSubject(subj);
     setContent(body);
@@ -996,7 +1011,7 @@ function MessageModal({ report, onClose, sendMessage }) {
         </button>
 
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          Send Message to @{(report.reported_by && report.reported_by.username) || report.reported_by}
+          Send Message to @{(report.reported_user && report.reported_user.username) || report.reported_user}
         </h2>
 
         {/* Template Picker */}

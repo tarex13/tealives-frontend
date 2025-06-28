@@ -40,6 +40,13 @@ export default function Sidebar({
     }
   }, [user]);
 
+  useEffect(()=>{
+    if(isMinimized){
+      setModerationOpen(false);
+      setSettingsOpen(false);
+    }
+  }, [isMinimized])
+
   // ────────────────────────────────────────────────────────────────────
   // 1) DESKTOP (lg+) FULL SIDEBAR, COLLAPSIBLE BY isMinimized
   // ────────────────────────────────────────────────────────────────────
@@ -107,7 +114,7 @@ export default function Sidebar({
                 <NavLink to="/settings/reset" className={linkClasses}>
                   Reset Password
                 </NavLink>
-                <NavLink to="/settings/notifications" className={linkClasses}>
+                {/*<NavLink to="/settings/notifications" className={linkClasses}>
                   Notifications
                 </NavLink>
                 <NavLink to="/settings/privacy" className={linkClasses}>
@@ -115,7 +122,7 @@ export default function Sidebar({
                 </NavLink>
                 <NavLink to="/settings/preferences" className={linkClasses}>
                   Preferences
-                </NavLink>
+                </NavLink>*/}
               </div>
             )}
             {(isAdmin || isStaff || isModerator) && (
@@ -132,25 +139,25 @@ export default function Sidebar({
                     <NavLink to="/mod/dashboard" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
                       Moderator Dashboard
                     </NavLink>
-                    <NavLink to="/mod/feedback" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
+                    {isAdmin && <NavLink to="/mod/feedback" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
                       Feedback Admin
-                    </NavLink>
+                    </NavLink>}
                     <NavLink to="/mod/reports" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
-                      Reported Users
+                      Reported Admin
                     </NavLink>
                   </div>
                 )}
               </>
             )}
-            {isAdmin && (
+            {/*isAdmin && (
               <NavLink
                 to="/admin/dashboard"
                 className="block px-3 py-2 rounded-lg bg-red-100 dark:bg-red-800 text-red-700 dark:text-white font-bold hover:bg-red-200 dark:hover:bg-red-700 transition"
                 title="Admin Dashboard"
               >
-                <BarChart className="w-5 h-5 inline-block" />{/* icon + text */}
+                <BarChart className="w-5 h-5 inline-block" />{/* icon + text /**}
               </NavLink>
-            )}
+            )*/}
             {isBusiness && (
               <NavLink
                 to="/business/analytics"
@@ -163,6 +170,8 @@ export default function Sidebar({
           </div>
         ) : (
           // ─────── Expanded: Full‐text links ───────
+          <>
+          {/**For Regular desktops */}
           <nav className="px-4 py-4 space-y-2 text-sm">
             {user && (
               <>
@@ -176,7 +185,7 @@ export default function Sidebar({
                 </NavLink>
                 <NavLink to="/saved" className={linkClasses}>
                   <Bookmark className="w-4 h-4" />
-                  Saved
+                  Saved Listings
                 </NavLink>
               </>
             )}
@@ -205,7 +214,7 @@ export default function Sidebar({
                     <NavLink to="/settings/reset" className={linkClasses}>
                       Reset Password
                     </NavLink>
-                    <NavLink to="/settings/notifications" className={linkClasses}>
+                    {/*<NavLink to="/settings/notifications" className={linkClasses}>
                       Notifications
                     </NavLink>
                     <NavLink to="/settings/privacy" className={linkClasses}>
@@ -213,7 +222,7 @@ export default function Sidebar({
                     </NavLink>
                     <NavLink to="/settings/preferences" className={linkClasses}>
                       Preferences
-                    </NavLink>
+                    </NavLink>*/}
                   </div>
                 )}
               </>
@@ -240,12 +249,29 @@ export default function Sidebar({
                     <NavLink to="/mod/dashboard" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
                       Moderator Dashboard
                     </NavLink>
-                    <NavLink to="/mod/feedback" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
+                    {isAdmin && <NavLink to="/mod/feedback" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
                       Feedback Admin
-                    </NavLink>
+                    </NavLink>}
                     <NavLink to="/mod/reports" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
-                      Reported Users
+                      Reported Admin
                     </NavLink>
+                    {isAdmin && (
+                      <>
+                        <NavLink to="/admin/badges/definitions" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition">
+                        Badge Definitions{/* icon={<FaImage />} */ }
+                        </NavLink>
+                        <NavLink to="/admin/badges/assignments"  className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition"> 
+                        Badge Assignments{/* icon={<FaUsers />} */ }
+                        </NavLink>
+                      </>
+                    )}
+                    {isModerator && !isAdmin && (
+                      <>
+                        <NavLink to="/mod/badges/assignments" className="block px-3 py-2 rounded-lg text-red-600 hover:bg-red-100 dark:hover:bg-red-800 transition"> 
+                        Badge Assignments
+                        </NavLink>
+                      </>
+                    )}
                   </div>
                 )}
               </>
@@ -271,6 +297,7 @@ export default function Sidebar({
               </NavLink>
             )}
           </nav>
+          </>
         )}
       </aside>
 
@@ -343,7 +370,7 @@ export default function Sidebar({
                 onClick={toggleMinimize}
               >
                 <Bookmark className="w-5 h-5" />
-                <span className="text-base">Saved</span>
+                <span className="text-base">Saved Listings</span>
               </NavLink>
 
               {/* Settings Accordion */}
@@ -377,7 +404,7 @@ export default function Sidebar({
                     >
                       Reset Password
                     </NavLink>
-                    <NavLink
+                    {/*<NavLink
                       to="/settings/notifications"
                       className="flex items-center gap-3 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-3 py-2 transition"
                       onClick={toggleMinimize}
@@ -397,7 +424,7 @@ export default function Sidebar({
                       onClick={toggleMinimize}
                     >
                       Preferences
-                    </NavLink>
+                    </NavLink>*/}
                   </div>
                 )}
               </div>
@@ -427,27 +454,47 @@ export default function Sidebar({
                       >
                         Moderator Dashboard
                       </NavLink>
-                      <NavLink
+                     {isAdmin && <NavLink
                         to="/mod/feedback"
                         className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
                         onClick={toggleMinimize}
                       >
                         Feedback Admin
-                      </NavLink>
+                      </NavLink>}
                       <NavLink
                         to="/mod/reports"
                         className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
                         onClick={toggleMinimize}
                       >
-                        Reported Users
+                        Reported Admin
                       </NavLink>
+                                          {isAdmin && (
+                      <>
+                        <NavLink to="/admin/badges/definitions" className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}>
+                        Badge Definitions{/* icon={<FaImage />} */ }
+                        </NavLink>
+                        <NavLink to="/admin/badges/assignments" className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}> 
+                        Badge Assignments{/* icon={<FaUsers />} */ }
+                        </NavLink>
+                      </>
+                    )}
+                    {isModerator && !isAdmin && (
+                      <>
+                        <NavLink to="/mod/badges/assignments" className="flex items-center gap-3 text-red-600 hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition"
+                        onClick={toggleMinimize}> 
+                        Badge Assignments
+                        </NavLink>
+                      </>
+                    )}
                     </div>
                   )}
                 </div>
               )}
 
               {/* Admin Dashboard */}
-              {isAdmin && (
+              {/*isAdmin && (
                 <NavLink
                   to="/admin/dashboard"
                   className="flex items-center gap-3 text-red-600 font-bold hover:bg-red-100 dark:hover:bg-red-800 rounded-md px-3 py-2 transition mt-4"
@@ -456,7 +503,7 @@ export default function Sidebar({
                   <BarChart className="w-5 h-5" />
                   <span className="text-base">Admin Dashboard</span>
                 </NavLink>
-              )}
+              )*/}
 
               {/* Business Analytics */}
               {isBusiness && (

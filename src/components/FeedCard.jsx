@@ -109,11 +109,12 @@ export default function FeedCard({ post, refetchPostData }) {
   return (
     <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow-sm hover:shadow-md transition-shadow mb-6 overflow-x-hidden break-words">
       {/* ────── Header ────── */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-2 border-b dark:border-gray-700">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-2 border-gray-300 dark:border-gray-300">
         <div className="flex items-center space-x-3 flex-1 min-w-0">
           <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-300 dark:bg-gray-700 flex-shrink-0">
             {post.profile_pic ? (
               <img
+              loading="lazy"
                 src={post.profile_pic}
                 alt={post.username}
                 className="h-full w-full object-cover"
@@ -149,6 +150,7 @@ export default function FeedCard({ post, refetchPostData }) {
               >
                 {post.group_info.avatar_url && (
                   <img
+                  loading="lazy"
                     src={post.group_info.avatar_url}
                     alt="Group"
                     className="w-5 h-5 rounded-full object-cover border border-gray-300 dark:border-gray-600"
@@ -194,10 +196,10 @@ export default function FeedCard({ post, refetchPostData }) {
 
       {/* ────── Title + Type Pill ────── */}
       <div className="px-4 sm:px-6 pt-3 pb-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white break-all">
+        <h2 className="flex items-center gap-2 text-sm md:text-lg font-bold text-gray-900 dark:text-white break-all">
           {post.title}
           <span
-            className={`inline-block text-xs uppercase font-semibold px-2 py-0.5 rounded-full ${pillStyle}`}
+            className={`inline-block text-[0.625rem] md:text-xs uppercase font-semibold px-2 py-0.5 rounded-full ${pillStyle}`}
           >
             {typeLabel}
             {post.post_type === 'alert' ? ` (${post.priority || 'low'})` : ''}

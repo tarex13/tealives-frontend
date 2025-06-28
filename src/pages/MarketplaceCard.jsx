@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { toggleSaveListing, getOrCreateConversation } from '../requests';
+import { toggleSaveListing } from '../requests';
 import MarketplaceCarousel from '../components/MarketplaceCarousel';
 import ListingActionMenu from '../components/ListingActionMenu';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -55,18 +55,32 @@ const [markSoldOpen, setMarkSoldOpen] = useState(false);
     >
       {/* ─── TOP: Carousel & Action Buttons ──────────────────────────────────── */}
       <div className="relative">
+        <div className="absolute flex top-2 right-2">
         {/* Save/Unsave Button (top-right) */}
-       {user && <button
-          onClick={handleToggleSave}
-          className="absolute top-2 right-10 z-10 text-2xl cursor-pointer"
-          title={isSaved ? 'Unsave' : 'Save'}
-          aria-label={isSaved ? 'Unsave listing' : 'Save listing'}
-        >
-          {isSaved ? '💖' : '🤍'}
-        </button>}
+        {user && (
+          <button
+            onClick={handleToggleSave}
+            className="
+               z-10 text-2xl cursor-pointer px-1
+            "
+            title={isSaved ? 'Unsave listing' : 'Save listing'}
+            aria-label={isSaved ? 'Unsave listing' : 'Save listing'}
+          >
+            <img
+              src={
+                isSaved
+                  ? '22.svg'
+                  : '21.svg'
+              }
+              alt={isSaved ? 'Unsave' : 'Save'}
+              className="w-6 h-6 -rotate-9"
+              loading="lazy"
+            />
+          </button>
+        )}
 
         {/* Listing Action Menu (three-dot) */}
-        <div className="absolute top-2 right-2 z-10">
+        <div className="z-10 px-1">
           <ListingActionMenu
             item={item}
             onEdited={() => {}}
@@ -75,7 +89,7 @@ const [markSoldOpen, setMarkSoldOpen] = useState(false);
             onHide={onHide} 
             setMarkSoldOpen={setMarkSoldOpen}
           />
-        </div>
+        </div></div>
         <div className="z-10">
         {/* Carousel or Placeholder */}
         {Array.isArray(item.images) && item.images.length > 0 ? (
@@ -221,10 +235,10 @@ const [markSoldOpen, setMarkSoldOpen] = useState(false);
               return;
             }
             try {
-              const res = await getOrCreateConversation(item.id);
-              console.log(res)
-              const convoId = res.data.conversation_id;
-              navigate(`/inbox?conversation=${convoId}&to=${item.seller.id}`);
+              //const res = await getOrCreateConversation(item.id);
+              //console.log(res)
+              //const convoId = res.data.conversation_id;
+              navigate(`/inbox?item=${item.id}&to=${item.seller.id}`);
             } catch {
               alert('Could not open chat.');
             }

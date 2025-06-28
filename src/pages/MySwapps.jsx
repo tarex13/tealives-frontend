@@ -1,3 +1,4 @@
+{/*Currently Not Being Used*/}
 import React, { useEffect, useState } from 'react';
 import { fetchSwappOffers, takeSwappAction } from '../requests';
 import SwappOfferCard from '../components/SwappOfferCard';

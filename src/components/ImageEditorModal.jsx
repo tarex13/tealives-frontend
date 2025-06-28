@@ -1,86 +1,126 @@
 // src/components/ImageEditorModal.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Cropper from 'react-easy-crop';
 import Slider from '@mui/material/Slider';
-import getCroppedImg from '../utils/cropImageUtils'; // your helper
+import getCroppedImg from '../utils/cropImageUtils';
 
-function ImageEditorModal({ fileObj, onSave, onClose }) {
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-  const [rotation, setRotation] = useState(0);
-  const [flip, setFlip] = useState(false);
-  const [caption, setCaption] = useState(fileObj.caption || '');
-
-  // 1) Build the source URL:
-  const imageSrc = useMemo(() => {
-    if (fileObj.editedFile instanceof Blob) {
-      return URL.createObjectURL(fileObj.editedFile);
-    }
-    if (fileObj.file instanceof Blob) {
-      return URL.createObjectURL(fileObj.file);
-    }
-    if (fileObj.url) {
-      return fileObj.url;
-    }
+export default function ImageEditorModal({ fileObj, onSave, onClose }) {
+  // — 1) Guard against missing props
+  if (!fileObj) {
+    console.warn('ImageEditorModal mounted without fileObj');
     return null;
-  }, [fileObj]);
+  }
 
-  // 2) Cleanup blob URLs
+  // — 2) Pull off any previously-saved crop data (if the parent passed it back)
+  const {
+    caption: initialCaption = '',
+    crop: initialCropProp,
+    zoom: initialZoomProp,
+    rotation: initialRotationProp,
+    flip: initialFlipProp,
+    editedFile,
+    url,
+    file,
+  } = fileObj;
+
+  const initialCrop = initialCropProp ?? { x: 0, y: 0 };
+  const initialZoom = initialZoomProp ?? 1;
+  const initialRotation = initialRotationProp ?? 0;
+  const initialFlip = initialFlipProp ?? false;
+
+  // — 3) Local state
+  const [caption, setCaption] = useState(initialCaption);
+  const [crop, setCrop] = useState(initialCrop);
+  const [zoom, setZoom] = useState(initialZoom);
+  const [rotation, setRotation] = useState(initialRotation);
+  const [flip, setFlip] = useState(initialFlip);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+
+  // — 4) Build the <img> source: if we've already saved an editedFile, use that;
+  //       otherwise fall back to the original Blob/url
+  const sourceFile = file ?? editedFile;
+  const [imageSrc, setImageSrc] = useState(null);
+  const containerRef = useRef(null);
+
   useEffect(() => {
+    const src = sourceFile instanceof Blob
+      ? URL.createObjectURL(sourceFile)
+      : url;
+    setImageSrc(src);
     return () => {
-      if (fileObj.editedFile instanceof Blob) {
-        URL.revokeObjectURL(imageSrc);
-      }
-      if (fileObj.file instanceof Blob && !fileObj.editedFile) {
-        URL.revokeObjectURL(imageSrc);
+      if (sourceFile instanceof Blob) {
+        URL.revokeObjectURL(src);
       }
     };
-  }, [fileObj, imageSrc]);
+  }, [sourceFile, url]);
 
+  // — 5) Bail if we still have no image
   if (!imageSrc) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center text-white text-lg">
         Unable to load image preview.
-        <button onClick={onClose} className="ml-4 underline">
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-4 underline"
+        >
           Close
         </button>
       </div>
     );
   }
 
-  const onCropComplete = (_, croppedPixels) => {
-    setCroppedAreaPixels(croppedPixels);
+  // — 6) Fit the full image **only on first load** (skip if the parent gave us a zoom)
+  const onMediaLoaded = ({ width: imgW, height: imgH }) => {
+    if (!containerRef.current) return;
+    // if parent passed back a zoom value, assume that was intentional
+    if (initialZoomProp != null) return;
+    const { clientWidth: cw, clientHeight: ch } = containerRef.current;
+    setZoom(Math.min(cw / imgW, ch / imgH));
   };
 
-  const handleSave = async () => {
-    if (!imageSrc || !croppedAreaPixels) return;
+  // — 7) Track final crop box
+  const onCropComplete = (_, pixels) => {
+    setCroppedAreaPixels(pixels);
+  };
 
+  // — 8) Save: generate the new blob **and** send _all_ of our state back up
+  const handleSave = async () => {
+    if (!croppedAreaPixels) return;
     try {
-      // Pass rotation/flip to your helper
       const blob = await getCroppedImg(
         imageSrc,
         croppedAreaPixels,
-        fileObj.file?.type || 'image/png',
+        sourceFile?.type || 'image/png',
         rotation,
         flip
       );
-      const editedFile = new File(
+      const newFile = new File(
         [blob],
-        fileObj.file?.name || 'cropped.png',
-        { type: fileObj.file?.type || 'image/png' }
+        sourceFile?.name ?? 'cropped.png',
+        { type: sourceFile?.type || 'image/png' }
       );
+
       onSave({
         ...fileObj,
-        editedFile,
+        // this becomes our next `editedFile`
+        editedFile: newFile,
+        // keep the URL around for non-Blob cases
+        url: undefined,
         caption,
         status: 'edited',
+        // persist your crop settings…
+        crop,
+        zoom,
+        rotation,
+        flip,
       });
     } catch (err) {
-      console.error('Error during image processing:', err);
+      console.error('Error generating cropped image:', err);
     }
   };
 
+  // — 9) Reset
   const resetEdits = () => {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
@@ -90,25 +130,36 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex flex-col items-center justify-center p-4">
-      <div className="relative w-full max-w-lg h-96 bg-white rounded shadow-lg overflow-hidden">
-        <Cropper
-          image={imageSrc}
-          crop={crop}
-          zoom={zoom}
-          rotation={rotation}
-          aspect={4 / 3}
-          onCropChange={setCrop}
-          onZoomChange={setZoom}
-          onRotationChange={setRotation}
-          onCropComplete={onCropComplete}
-          objectFit="horizontalCover"
-          transform={{
-            scaleX: flip ? -1 : 1,
+      {/* Cropping frame */}
+      <div
+        ref={containerRef}
+        className="relative w-full max-w-lg h-96 bg-white rounded shadow-lg overflow-hidden"
+      >
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            transform: flip ? 'scaleX(-1)' : 'none',
           }}
-        />
+        >
+          <Cropper
+            image={imageSrc}
+            crop={crop}
+            zoom={zoom}
+            rotation={rotation}
+            aspect={16 / 9}
+            onCropChange={setCrop}
+            onZoomChange={setZoom}
+            onRotationChange={setRotation}
+            onCropComplete={onCropComplete}
+            onMediaLoaded={onMediaLoaded}
+            showGrid={false}
+            objectFit="contain"
+          />
+        </div>
       </div>
 
-      {/* Caption Input */}
+      {/* Caption */}
       <div className="w-full max-w-lg mt-4">
         <input
           type="text"
@@ -119,44 +170,53 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
         />
       </div>
 
-      {/* Zoom Slider */}
-      <div className="w-full max-w-lg">
+      {/* Zoom slider */}
+      <div className="w-full max-w-lg pointer-events-auto">
         <Slider
           value={zoom}
           min={1}
           max={5}
           step={0.1}
-          onChange={(e, value) => setZoom(value)}
+          aria-label="Zoom"
+          onChange={(_, v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            setZoom(val);
+          }}
         />
       </div>
 
-      {/* Control Buttons */}
+      {/* Buttons */}
       <div className="flex flex-wrap gap-2 mt-4">
         <button
+          type="button"
           onClick={() => setRotation((r) => (r + 90) % 360)}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
         >
           Rotate
         </button>
         <button
+          type="button"
           onClick={() => setFlip((f) => !f)}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
         >
           Flip
         </button>
         <button
+          type="button"
           onClick={resetEdits}
           className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition"
         >
           Reset
         </button>
         <button
+          type="button"
           onClick={handleSave}
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
           Save
         </button>
         <button
+          type="button"
           onClick={onClose}
           className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
         >
@@ -166,5 +226,3 @@ function ImageEditorModal({ fileObj, onSave, onClose }) {
     </div>
   );
 }
-
-export default ImageEditorModal;

@@ -11,6 +11,7 @@ import {
   fetchPendingAlerts,
   approveAlert
 } from '../requests';
+import { Helmet } from 'react-helmet-async';
 import { useNotification } from '../context/NotificationContext';
 
 export default function ModDashboard() {
@@ -84,6 +85,9 @@ export default function ModDashboard() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-12">
+            <Helmet>
+              <title>Moderation | Tealives</title>
+            </Helmet>
       <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
         Moderator Dashboard
       </h1>

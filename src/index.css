@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 /* ===== Scrollbar Base Styles (WebKit) ===== */
 ::-webkit-scrollbar {
   width: 8px;

@@ -53,11 +53,19 @@ export default function MediaCarousel({ mediaFiles = [] }) {
 
     return (
         <div className="relative w-full mx-auto my-4">
-            <div className="relative overflow-hidden rounded shadow transition-transform duration-300">
+            <div
+              className="relative overflow-hidden rounded shadow transition-transform duration-300"
+              style={{
+                aspectRatio: '16 / 9',
+                maxHeight: '400px',
+                width: '100%',
+              }}
+            >
                 <img
+                loading="lazy"
                     src={getImageUrl(mediaFiles[current])}
                     alt={`Media ${current + 1}`}
-                    className="w-full object-cover cursor-pointer transform hover:scale-105 transition-transform duration-300" style={{maxHeight: '400px'}}
+                    className="w-full h-full object-cover cursor-pointer transform hover:scale-105 transition-transform duration-300"
                     onClick={openLightbox}
                 />
                 {mediaFiles.length > 1 && (
@@ -96,6 +104,7 @@ export default function MediaCarousel({ mediaFiles = [] }) {
                     onClick={closeLightbox}
                 >
                     <img
+                    loading="lazy"
                         src={getImageUrl(mediaFiles[current])}
                         alt={`Media Full ${current + 1}`}
                         className="max-w-full max-h-full p-4 object-contain"

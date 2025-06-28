@@ -5,6 +5,11 @@ export function getGroupPosts(groupId) {
   return api.get(`/groups/${groupId}/posts/`)
 }
 
+export const updateGroup = (groupId, data) => {
+  // assuming `api` is Axios instance with baseURL pointing to '/api/'
+  return api.patch(`groups/${groupId}/`, data);
+};
+
 export const getGroupDetail = (groupId) =>
   api.get(`groups/${groupId}/`)
 

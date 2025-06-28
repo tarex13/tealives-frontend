@@ -5,6 +5,8 @@ import MediaManager from './MediaManager';
 import ImageEditorModal from './ImageEditorModal';
 import { useNotification } from '../context/NotificationContext';
 import { toZonedTime } from 'date-fns-tz';
+import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 const MAX_MEDIA_FILES = 5;
 
@@ -52,24 +54,19 @@ export default function CreatePost({
   onEditSubmit = null, // callback FormData ⇒ Promise to PATCH an existing post
   groupId = null,      // (optional) if posting inside a group
 }) {
+  const { user } = useAuth()           // ← add
+  const navigate = useNavigate()
   // ─── State Definitions ───────────────────────────────────────────────────────
-  const [form, setForm] = useState(
-    initialData
-      ? {
-          title:     initialData.title || '',
-          content:   initialData.content || '',
-          post_type: initialData.post_type || 'discussion',
-          anonymous: initialData.anonymous || false,
-          priority:  initialData.priority || 'low',
-        }
-      : {
-          title:     '',
-          content:   '',
-          post_type: 'discussion',
-          anonymous: false,
-          priority:  'low',
-        }
-  );
+  const [form, setForm] = useState(() => ({
+    title:      initialData?.title      ?? '',
+    content:    initialData?.content    ?? '',
+    post_type:  initialData?.post_type  ?? 'discussion',
+    anonymous:  initialData?.anonymous  ?? false,
+    priority:   initialData?.priority   ?? 'low',
+    is_global:  initialData?.is_global  ?? false,  // always defined
+    ownerId:    initialData?.ownerId    ?? null,
+    edit:       Boolean(initialData),
+  }));
 
   const [mediaFiles, setMediaFiles] = useState(
     initialData
@@ -97,12 +94,19 @@ export default function CreatePost({
   // ─── Keep form state in sync if `initialData` changes (e.g. on fetch) ───────
   useEffect(() => {
     if (!initialData) return;
+    console.log(initialData.ownerId);
+    if (initialData.edit && (initialData.ownerId && initialData.ownerId !== user.id)) {
+      showNotification('You’re not allowed to edit this post.', 'error')
+      navigate('/')
+      return
+    }
     setForm({
       title:     initialData.title || '',
       content:   initialData.content || '',
       post_type: initialData.post_type || 'discussion',
       anonymous: initialData.anonymous || false,
       priority:  initialData.priority || 'low',
+      is_global: initialData.is_global ?? false,
     });
     setMediaFiles(initialData.mediaFiles || []);
     if (initialData.post_type === 'poll') {
@@ -137,6 +141,7 @@ export default function CreatePost({
       post_type: 'discussion',
       anonymous: false,
       priority:  'low',
+      is_global: false,
     });
     setMediaFiles([]);
     setPollOptions(['', '']);
@@ -177,6 +182,9 @@ export default function CreatePost({
         fd.append('content', form.content.trim());
         fd.append('post_type', form.post_type);
         fd.append('anonymous', cfg.forceAnonymous || form.anonymous);
+        if (user?.is_admin) {
+          fd.append('is_global', form.is_global);
+        }
         if (cfg.allowPriority) {
           fd.append('priority', form.priority);
         }
@@ -250,10 +258,14 @@ export default function CreatePost({
         fd.append('title', form.title.trim());
         fd.append('content', form.content.trim());
         fd.append('post_type', form.post_type);
+        if (user?.is_admin) {
+          fd.append('is_global', form.is_global);
+        }
         fd.append('anonymous', cfg.forceAnonymous || form.anonymous);
         if (cfg.allowPriority) {
           fd.append('priority', form.priority);
         }
+
         if (groupId) {
           fd.append('group', groupId);
         }
@@ -292,9 +304,11 @@ export default function CreatePost({
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
+    <>
     <form
       onSubmit={handleSubmit}
       className="p-6 rounded-xl shadow bg-white dark:bg-gray-900 mb-8"
+      noValidate={!!editingFile}
     >
       {/* Header changes depending on create vs edit */}
       <h2 className="text-2xl font-semibold mb-4">
@@ -420,6 +434,19 @@ export default function CreatePost({
         </label>
       )}
 
+      {/* Global Checkbox – only show to admins */}
+      {user?.is_admin && (
+        <label className="flex items-center gap-2 mb-4">
+          <input
+            type="checkbox"
+            name="is_global"
+            checked={!!form.is_global}
+            onChange={handleChange}
+          />
+          Make this post global
+        </label>
+      )}
+
       {cfg.disclaimer && (
         <p className="text-xs italic text-gray-500 mb-4">
           {cfg.disclaimer}
@@ -438,7 +465,6 @@ export default function CreatePost({
       {/* Submit Button */}
       <button
         type="submit"
-        onClick={(e)=>e.preventDefault()}
         disabled={loading}
         className="w-full py-3 font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
       >
@@ -451,20 +477,22 @@ export default function CreatePost({
           : cfg.submitText}
       </button>
 
-{editingFile && (
-  <ImageEditorModal
-    fileObj={editingFile}
-    onSave={(updatedFileObj) => {
-      setMediaFiles((prev) =>
-        prev.map((f) =>
-          f.id === updatedFileObj.id ? updatedFileObj : f
-        )
-      );
-      setEditingFile(null);
-    }}
-    onClose={() => setEditingFile(null)}
-  />
-)}
     </form>
-  );
+            {editingFile && (
+              <ImageEditorModal
+                fileObj={editingFile}
+                onSave={(updated) => {
+                  setMediaFiles((prev) =>
+                    prev.map((f) =>
+                      f.id === updated.id ? updated : f
+                    )
+                  );
+                  setEditingFile(null);
+                }}
+                onClose={() => setEditingFile(null)}
+              />
+        )}
+      </>
+    );
+  
 }

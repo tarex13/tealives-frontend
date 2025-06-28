@@ -1,11 +1,13 @@
 // src/pages/Inbox.jsx
 import React, { useCallback, useRef,  useState, useEffect  } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { ClipboardIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Helmet } from 'react-helmet-async';
 import { Virtuoso } from 'react-virtuoso';
 import { sendReaction } from '../requests';
-import api from '../api';import {fetchThreads,fetchThread,fetchPublicProfile, editMessage, deleteMessage,reportMessage,markMessageSeen,} from '../requests';
+import api from '../api';import {fetchThreads,fetchThread,fetchPublicProfile, editMessage, deleteMessage, fetchMarketplaceItemDetail, reportMessage, markMessageSeen,} from '../requests';
 import { createWebSocket } from '../utils/websocket';
 import NewMessageModal from '../components/NewMessageModal';
 import { formatDistanceToNow, parseISO, isToday, isYesterday, isValid } from 'date-fns';
@@ -84,6 +86,7 @@ export default function Inbox({ setSidebarMinimized }) {
   const wsRef = useRef(null);
   const [wsReady, setWsReady] = useState(false);
   const[messageId, setMessageId] = useState(null);
+  const[reportedUser, setReportedUser] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const inboxMessagesRef = useRef(null);
   const typingTimeout = useRef(null);
@@ -98,7 +101,7 @@ export default function Inbox({ setSidebarMinimized }) {
   });
   const [isLoadingMoreThreads, setIsLoadingMoreThreads] = useState(false);
   const autoOpenUserId = searchParams.get('to');
-  const autoConvoId = searchParams.get('conversation');
+  const autoItemId = searchParams.get('item');
   // ─ Threads & messages state
   const [filteredThreads, setFilteredThreads] = useState([]);
   const [activeThread, setActiveThread] = useState(null);
@@ -223,13 +226,53 @@ const messagesRef = useRef(null);
         }
       }
   async function handleReact(messageId, emoji) {
+    let previousMessages = [];
+
+    setMessages(prevMessages => {
+      previousMessages = prevMessages; // Capture previous state for rollback
+
+      return prevMessages.map(m => {
+        if (m.id !== messageId) return m;
+
+        const userReacted = (m.user_reactions || []).includes(emoji);
+        const newUserReactions = userReacted
+          ? m.user_reactions.filter(e => e !== emoji)
+          : [...(m.user_reactions || []), emoji];
+
+        let newReactionsSummary = [...(m.reactions_summary || [])];
+
+        const existingIndex = newReactionsSummary.findIndex(r => r.emoji === emoji);
+
+        if (existingIndex >= 0) {
+          const updated = { ...newReactionsSummary[existingIndex] };
+          updated.count += userReacted ? -1 : 1;
+
+          if (updated.count <= 0) {
+            newReactionsSummary.splice(existingIndex, 1); // remove if 0
+          } else {
+            newReactionsSummary[existingIndex] = updated;
+          }
+        } else if (!userReacted) {
+          newReactionsSummary.push({ emoji, count: 1 });
+        }
+
+        return {
+          ...m,
+          user_reactions: newUserReactions,
+          reactions_summary: newReactionsSummary
+        };
+      });
+    });
+
     try {
       await sendReaction('message_id', messageId, emoji);
-      // the WS “reaction” broadcast will update the UI automatically
     } catch {
-      showNotification('Could not add reaction','error');
+      showNotification('Could not add reaction', 'error');
+      // Revert to previous state
+      setMessages(previousMessages);
     }
   }
+
   // ─ Typing indicator
   const [isTyping, setIsTyping] = useState(false);
   const [hasSentTypingTrue, setHasSentTypingTrue] = useState(false);
@@ -257,10 +300,20 @@ const messagesRef = useRef(null);
   const [messagesPage, setMessagesPage] = useState({ results: [], next: null });
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
 
-  function extractUrl(text) {
-  const m = text.match(/https?:\/\/\S+/);
-  return m ? m[0] : null;
-}
+  function extractUrls(text) {
+    if (typeof text !== 'string') return [];
+
+    // match http(s)://… or www.… up to whitespace or some closing punctuation
+    const urlRegex = /((https?:\/\/)|(www\.))[^\s<>"']+/gi;
+    const raw = text.match(urlRegex) || [];
+    return raw
+      .map(u => u.replace(/[.,!?:;]+$/, ''))         // strip trailing .,;!?: 
+      .map(u => (u.startsWith('www.') ? 'https://' + u : u))
+      .filter(u => {
+        try { new URL(u); return true; }
+        catch { return false; }
+      });
+  }
 
 // 1️⃣ Fetch threads initially (and auto-open if needed)
     useEffect(() => {
@@ -268,28 +321,87 @@ const messagesRef = useRef(null);
       setLoadingThreads(true);
 
       async function init() {
+        console.log(1);
         const page = await loadThreadsPage();
         if (cancelled) return;
 
-        // — now your same auto-open logic, but against threadsPage.results —
-        if (autoConvoId) {
-          const t = page.results.find(
-            t => t.type === 'marketplace'
-              && String(t.conversation_id) === String(autoConvoId)
-          );
-          if (t) { setActiveThread(t); setShowContacts(false); return; }
+        // Priority 1: new marketplace message
+        if (autoOpenUserId &&  autoItemId) {
+          
+          console.log(2);
+          try {
+            let [user, item] = await Promise.all([
+              fetchPublicProfile(autoOpenUserId),
+              fetchMarketplaceItemDetail( autoItemId),
+            ]);
+           item = item.data || item
+
+            const thread = {
+              type: 'marketplace',
+              item_id: item.id,
+              item_title: item.title,
+              item_status: item.status,
+              item_bidding: item.is_bidding,
+              item_thumbnail: item.thumbnail,
+              item_price: item.price,
+              starting_bid: item.starting_bid,
+              highest_bid: item.highest_bid,
+              buyer: { id: user.id }, // temporary
+              seller: item.seller,
+              other_user: user,
+              last_message: '',
+              last_message_time: new Date().toISOString(),
+              unread_count: 0,
+              is_virtual: true
+            };
+            setActiveThread(thread);
+            setShowContacts(false);
+            console.log(thread);
+            return;
+          } catch (err) {
+            console.error("Error loading user/item:", err);
+          }
         }
-        if (autoOpenUserId) {
+
+        // Priority 2: new direct message
+        if (autoOpenUserId && ! autoItemId) {
+          
+        console.log(3);
           let t = page.results.find(
-            t => t.type === 'direct'
-              && String(t.user.id) === String(autoOpenUserId)
+            t => t.type === 'direct' &&
+            String(t.user.id) === String(autoOpenUserId)
           );
           if (!t) {
             const u = await fetchPublicProfile(autoOpenUserId);
-            t = { type:'direct', user:u, last_message:'', last_message_time:new Date().toISOString(), unread_count:0 };
+            t = {
+              type: autoItemId ? 'marketplace' : 'direct',
+              user: u,
+              last_message: '',
+              last_message_time: new Date().toISOString(),
+              unread_count: 0,
+            };
+
+            if (autoItemId) {
+              const itemDetail = await fetchMarketplaceItemDetail(autoItemId);
+              t.item_id = itemDetail.id;
+              t.item_title = itemDetail.title;
+              t.item_price = itemDetail.price;
+              t.item_status = itemDetail.status;
+              t.item_thumbnail = itemDetail.thumbnail || null;
+              t.buyer = u;
+              t.seller = itemDetail.seller;
+              console.log(t);
+            }
+
+            setThreadsPage((prev) => ({
+              ...prev,
+              results: [t, ...(prev?.results || [])]
+            }));
           }
           setActiveThread(t);
           setShowContacts(false);
+
+          return;
         }
       }
 
@@ -298,7 +410,7 @@ const messagesRef = useRef(null);
         .finally(() => { if (!cancelled) setLoadingThreads(false); });
 
       return () => { cancelled = true; };
-    }, [autoOpenUserId, autoConvoId, setSidebarMinimized]);
+    }, [autoOpenUserId,  autoItemId, setSidebarMinimized]);
 
       // ── 1️⃣ Auto‐scroll to bottom on thread switch ───────────────────────
       useEffect(() => {
@@ -320,37 +432,58 @@ const messagesRef = useRef(null);
           });
   }, [activeThread, virtualItems.length, messagesPage.next]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 2️⃣ Filter “threads” list as user types :contentReference[oaicite:1]{index=1}
-  useEffect(() => {
-    // first dedupe by a stable key
-   const uniqueThreads = Array.from(
-     new Map(
-       threadsPage.results.map(t => {
-         const key =
-           t.type === 'direct'
-             ? `direct-${t.user.id}`
-             : t.type === 'marketplace'
-             ? `mp-${t.conversation_id}`
-             : `group-${t.group.id}`;
-         return [key, t];
-       })
-     ).values()
-   );
-   // now filter
-   const filtered = uniqueThreads.filter(t => {
-      let name;
-      if (t.type === 'direct') {
-        name = t.user.username;
-      } else if (t.type === 'marketplace') {
-        name = t.item_title;
-      } else {
-        name = t.group.name;
+// ─────────────────────────────────────────────────────────────────────────────
+// 2️⃣ Filter “threads” list as user types
+useEffect(() => {
+  let threads = threadsPage?.results || [];
+
+  // Inject activeThread if missing from the list
+  if (activeThread) {
+    const exists = threads.some(t => {
+      if (t.type === 'marketplace' && activeThread.type === 'marketplace') {
+        return t.conversation_id === activeThread.conversation_id;
       }
-      return name.toLowerCase().includes(searchThreads.toLowerCase());
+      if (t.type === 'direct' && activeThread.type === 'direct') {
+        return t.user?.id === activeThread.user?.id;
+      }
+      return false;
     });
-    setFilteredThreads(filtered);
-  }, [searchThreads, threadsPage.results]);
+
+    if (!exists) {
+      threads = [activeThread, ...threads];
+    }
+  }
+
+  // Deduplicate threads by stable key
+  const uniqueThreads = Array.from(
+    new Map(
+      threads.map(t => {
+        const key =
+          t.type === 'direct'
+            ? `direct-${t.user?.id}`
+            : t.type === 'marketplace'
+            ? `mp-${t.conversation_id}`
+            : `group-${t.group?.id}`;
+        return [key, t];
+      })
+    ).values()
+  );
+
+  // Filter by search input
+  const filtered = uniqueThreads.filter(t => {
+    let name;
+    if (t.type === 'direct') {
+      name = t.user?.username || '';
+    } else if (t.type === 'marketplace') {
+      name = t.item_title || '';
+    } else {
+      name = t.group?.name || '';
+    }
+    return name.toLowerCase().includes(searchThreads.toLowerCase());
+  });
+
+  setFilteredThreads(filtered);
+}, [searchThreads, threadsPage?.results, activeThread]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 3️⃣ Fetch messages + connect WebSocket on thread select :contentReference[oaicite:2]{index=2}
@@ -618,6 +751,7 @@ const handleSendOrUpload = async () => {
               ? activeThread.user.id
               : activeThread.other_user.id,
           content,
+          item: autoItemId,
           conversationId:
             activeThread.type === 'marketplace'
               ? activeThread.conversation_id
@@ -732,8 +866,10 @@ const handleSendOrUpload = async () => {
     }
   };
 
-  const handleReport = async (msgId) => {
-    setMessageId(msgId);
+  const handleReport = async (msg) => {
+    console.log(msg);
+    setMessageId(msg.id);
+    setReportedUser(msg.sender_id);
     setReportOpen(true);
     
   };
@@ -836,14 +972,17 @@ function formatFileSize(bytes) {
 
   return (
     <div className="h-[80vh] w-full flex flex-col md:flex-row md:px-6 py-4">
+      <Helmet>
+        <title>Inbox | Tealives</title>
+      </Helmet>
       {/* Chat container */}
       <div className="max-w-7xl mx-auto flex-1 bg-gray-800 dark:bg-gray-900 rounded-2xl overflow-hidden shadow-lg">
         <div className="h-full flex">
           {/* ─── Contacts Pane (Left) ────────────────────────────────────────────── */}
           <div
             className={`
-              fixed inset-y-0 left-0 z-40 w-full md:w-[28vw]
-              bg-gray-900 dark:bg-gray-800
+              fixed inset-y-0 left-0 z-40 w-full md:w-[35vw] lg:w-[28vw]
+              bg-gray-50 dark:bg-gray-800 my-[10vh] md:my-0
               border-r border-gray-700
               transform transition-transform duration-300 ease-in-out
               ${showContacts ? 'translate-x-0' : '-translate-x-full'}
@@ -852,16 +991,9 @@ function formatFileSize(bytes) {
             `}
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-700 flex items-center justify-between bg-gray-800">
-              <h2 className="text-xl font-semibold text-gray-100">Messages</h2>
-              {/* Back button on mobile */}
-              <button
-                className="md:hidden p-2 rounded-lg hover:bg-gray-700 transition"
-                onClick={() => setShowContacts(false)}
-                type="button"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-400" />
-              </button>
+            <div className="px-6 py-5	bg-gray-200 border-gray-700 flex items-center justify-between dark:bg-gray-800">
+              <h2 className="text-xl font-semibold dark:text-gray-100 text-gray-600">Messages</h2>
+  
             </div>
 
             {/* Search + “New Message” */}
@@ -875,11 +1007,11 @@ function formatFileSize(bytes) {
                   onChange={(e) => setSearchThreads(e.target.value)}
                   className="
                     w-full pl-12 pr-3 py-2
-                    bg-gray-800 dark:bg-gray-700
+                    bg-gray-200 dark:bg-gray-700
                     border border-gray-600 dark:border-gray-600
                     rounded-lg
                     focus:outline-none focus:ring-2 focus:ring-blue-500
-                    text-gray-100
+                    dark:text-gray-100 text-800
                   "
                 />
               </div>
@@ -916,10 +1048,11 @@ function formatFileSize(bytes) {
                       displayName = t.user.username;
                       subtitle = t.last_message || 'No messages yet';
                     } else if (t.type === 'marketplace') {
-                      displayName = t.item_title;
-                      subtitle = `${t.other_user.username}: ${
+                      displayName = `${t.item_title} with ${t.other_user.username}`;
+                      subtitle = [
+                        `$${t.item_price.toFixed(2)}`,
                         t.last_message || 'No messages yet'
-                      }`;
+                      ].join(' • ');
                     } else {
                       displayName = t.group.name;
                       subtitle = t.last_message || 'No messages yet';
@@ -931,16 +1064,21 @@ function formatFileSize(bytes) {
                         })
                       : '';
                     const unread = t.unread_count > 0;
-                    const isActive =
-                      activeThread &&
-                      t.type === activeThread.type &&
-                      ((t.type === 'direct' &&
-                        activeThread.buyer?.id === t.buyer?.id) ||
-                        (t.type === 'marketplace' &&
-                          String(activeThread.conversation_id) ===
-                            String(t.conversation_id)) ||
-                        (t.type === 'group' &&
-                          activeThread.group?.id === t.group?.id));
+                    const isActive = (() => {
+                      if (!activeThread || t.type !== activeThread.type) return false;
+                      if (t.type === 'direct') {
+                        // compare the two users
+                        return t.user?.id === activeThread.user?.id;
+                      }
+                      if (t.type === 'marketplace') {
+                        // compare conversation IDs
+                        return String(t.conversation_id) === String(activeThread.conversation_id);
+                      }
+                      if (t.type === 'group') {
+                        return t.group?.id === activeThread.group?.id;
+                      }
+                      return false;
+                    })();
 
                     const keyVal =
                       t.type === 'direct'
@@ -953,6 +1091,16 @@ function formatFileSize(bytes) {
                       <li
                         key={keyVal}
                         onClick={() => {
+                            // Clear unread count for selected thread
+                              // Clear unread count for selected thread
+                            if (t.unread_count > 0) {
+                              setThreadsPage(prev => ({
+                                ...prev,
+                                results: prev.results.map(p =>
+                                  p === t ? { ...p, unread_count: 0 } : p
+                                ),
+                              }));
+                            }
                           setActiveThread(t);
                           setShowContacts(false);
                         }}
@@ -960,8 +1108,8 @@ function formatFileSize(bytes) {
                           flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer
                           ${
                             isActive
-                              ? 'bg-gray-700 border-l-4 border-blue-500'
-                              : 'hover:bg-gray-700'
+                              ? 'dark:bg-gray-700 bg-gray-300 border-l-4 border-blue-500'
+                              : 'hover:dark:bg-gray-300 hover:bg-gray-300'
                           }
                           transition-colors 
                         `}
@@ -1006,10 +1154,10 @@ function formatFileSize(bytes) {
                             )}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <p className="text-sm font-semibold text-gray-100 truncate">
+                            <p className="text-sm font-semibold dark:text-gray-100 text-gray-700 truncate">
                               {displayName}
                             </p>
-                            <p className="text-xs text-gray-400 truncate">
+                            <p className="text-xs dark:text-gray-400 text-gray-500 truncate">
                               {subtitle}
                             </p>
                           </div>
@@ -1033,7 +1181,7 @@ function formatFileSize(bytes) {
           {/* ─── Chat Pane (Right) ───────────────────────────────────────────────── */}
           <div   className={`
     flex-1 flex flex-col min-h-0
-    w-full md:w-[50vw] lg:w-[70vw]
+    w-full md:w-[50vw] lg:w-[50vw]
     bg-white dark:bg-gray-900
     ${isDragging ? 'ring-2 ring-blue-400' : ''}
   `}
@@ -1051,17 +1199,17 @@ function formatFileSize(bytes) {
             <div
               className={`
                 flex items-center justify-between px-6 py-4 border-b border-gray-700
-                bg-gray-900 md:hidden
+                dark:bg-gray-900 bg-gray-300 md:hidden
               `}
             >
               <button
-                onClick={() => setShowContacts(true)}
+                onClick={() => {setShowContacts(true);  setActiveThread(null);}}
                 className="p-2 rounded-lg hover:bg-gray-700 transition"
                 type="button"
               >
-                <ArrowLeft className="w-5 h-5 text-gray-400" />
+                <ArrowLeft className="w-5 h-5 dark:text-gray-400 text-gray-800 " />
               </button>
-              <h3 className="text-lg font-semibold text-gray-100 truncate">
+              <h3 className="text-lg font-semibold dark:text-gray-100  text-gray-800 truncate">
                 {activeThread
                   ? activeThread.type === 'direct'
                     ? activeThread.user.username
@@ -1077,12 +1225,12 @@ function formatFileSize(bytes) {
               <>
                 {/* ─── DESKTOP CHAT HEADER ───────────────────────── */}
                 {activeThread.type === 'direct' && (
-                  <div className="hidden md:flex items-center px-8 py-5 border-b border-gray-700 bg-gray-900">
+                  <div className="hidden md:flex items-center px-8 py-5 border-b border-gray-700 bg-gray-200 dark:bg-gray-900">
                     <div className="flex items-center space-x-5">
-                      <div className="h-12 w-12 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center text-white font-bold">
+                      <div className="h-12 w-12 rounded-full bg-gray-600 dark:bg-gray-900 overflow-hidden flex items-center justify-center text-white font-bold">
                         {activeThread.user.username[0].toUpperCase()}
                       </div>
-                      <h3 className="text-2xl font-semibold text-gray-100 truncate">
+                      <h3 className="text-2xl font-semibold text-gray-100 dark: text-gray-900 truncate">
                         {activeThread.user.username}
                       </h3>
                     </div>
@@ -1103,6 +1251,10 @@ function formatFileSize(bytes) {
                           className="h-full w-full object-cover"
                         />
                       ) : (
+                        activeThread.conversation_id ?
+                        <span className="flex h-full w-full items-center justify-center text-white text-lg">
+                                  🛒
+                                </span> :
                         <span className="text-gray-500">No Image</span>
                       )}
                     </div>
@@ -1149,7 +1301,7 @@ function formatFileSize(bytes) {
           </div>
       ) : virtualItems.length === 0 ? (
         <p className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-          No messages yet. Say hello!
+          No messages yet. Say hello!{console.log(virtualItems)}
         </p>
       ) : (
         <>
@@ -1222,6 +1374,12 @@ function formatFileSize(bytes) {
             ) {
               markMessageSeen(m.id).catch(() => {});
             }
+              const links = extractUrls(m.content);
+
+              const copyToClipboard = async (txt) => {
+                try { await navigator.clipboard.writeText(txt); }
+                catch { /* fallback or ignore */ }
+              };
     
           return (
             <div
@@ -1250,8 +1408,8 @@ function formatFileSize(bytes) {
                         isModerator
                           ? 'bg-purple-600 text-white'
                           : isOwner
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-slate-700 text-gray-100'
+                          ? 'dark:bg-blue-500 bg-[#298F9B] text-white'
+                          : 'dark:bg-gray-700   bg-[#6c7b5a] text-gray-100'
                       }
                       ${
                         isDeleted
@@ -1296,44 +1454,63 @@ function formatFileSize(bytes) {
                         This message was deleted
                       </p>
                     ) : isEditing ? (
-                      <div className="flex items-center space-x-2">
-                        <input
-                          value={editingContent}
-                          onChange={e =>
-                            setEditingContent(e.target.value)
-                          }
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              saveEdit(m.id);
-                            } else if (e.key === 'Escape') {
-                              cancelEditing();
-                            }
-                          }}
-                          className="
-                            flex-1 px-3 py-1
-                            bg-slate-600 border border-slate-500
+                    <div className="relative">
+                      <div
+                          contentEditable
+                        suppressContentEditableWarning
+                        className="
+                          px-5 py-3
+                          bg-slate-600 border border-slate-500
                             rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400
-                            text-gray-100
-                          "
-                          type="text"
-                          autoFocus
-                        />
+                          text-gray-100 whitespace-pre-wrap break-words
+                        "
+                        onInput={e => {
+                         // pull plain text out
+                            const text = e.currentTarget.innerText;
+                            setEditingContent(text);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            saveEdit(m.id);
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            cancelEditing();
+                          }
+                        }}
+                      onBlur={() => saveEdit(m.id)}
+                        ref={el => {
+                          if (el) {
+                              el.innerText = editingContent;
+                           // move caret to end
+                              const range = document.createRange();
+                              const sel = window.getSelection();
+                            range.selectNodeContents(el);
+                            range.collapse(false);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                          }
+                        }}
+                      />
+                     {/* Explicit save/cancel buttons (optional) */}
+                      <div className="absolute top-1 right-1 flex space-x-1">
                         <button
                           onClick={() => saveEdit(m.id)}
-                          className="p-1 text-green-400 hover:bg-slate-600 rounded transition"
-                          type="button"
+                          className="p-1 text-green-400 hover:bg-slate-700 rounded transition"
+                          aria-label="Save"
                         >
-                          <Check className="w-5 h-5" />
-                        </button>
+                          <Check className="w-4 h-4" />
+                          </button>
                         <button
                           onClick={cancelEditing}
-                          className="p-1 text-red-400 hover:bg-slate-600 rounded transition"
-                          type="button"
+                            className="p-1 text-red-400 hover:bg-slate-700 rounded transition"
+                          aria-label="Cancel"
                         >
-                          <X className="w-5 h-5" />
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
+                    </div>
                     ) : (
                       <>
                         {/* Moderator subject */}
@@ -1343,22 +1520,64 @@ function formatFileSize(bytes) {
                             {m.subject}
                           </div>
                         )}
-                        <p className="text-sm whitespace-pre-wrap break-words">
+                        <p className="text-sm whitespace-pre-wrap break-words ">
                           {m.content}
                         </p>
                         {/* Auto-link preview */}
-                        {extractUrl(m.content) && (
-                          <div className="border rounded p-2 mt-2 hover:bg-gray-700 transition">
-                            <a
-                              href={extractUrl(m.content)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-400 truncate block"
+                          {links.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {links.map(url => {
+                      const hostname = new URL(url).hostname.replace(/^www\./, '');
+                      return (
+                        <div
+                          key={url+Math.random()}
+                          className="
+                            flex items-center justify-between
+                            border border-gray-300 dark:border-gray-700
+                            bg-gray-50 dark:bg-gray-800
+                            rounded-lg px-3 py-2
+                            transition-colors hover:bg-gray-100 dark:hover:bg-gray-700
+                          "
+                        >
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center space-x-2 truncate"
+                          >
+                            <span
+                              className="
+                                inline-block px-2 py-0.5
+                                bg-blue-100 dark:bg-blue-700
+                                text-blue-800 dark:text-blue-100
+                                text-xs font-semibold
+                                rounded
+                              "
                             >
-                              {extractUrl(m.content)}
-                            </a>
-                          </div>
-                        )}
+                              {hostname}
+                            </span>
+                            <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                              {url}
+                            </span>
+                            <ArrowTopRightOnSquareIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                          </a>
+                          <button
+                            onClick={() => copyToClipboard(url)}
+                            className="
+                              ml-2 p-1 rounded-full
+                              text-gray-500 dark:text-gray-400
+                              hover:bg-gray-200 dark:hover:bg-gray-700
+                              transition-colors
+                            "
+                            title="Copy link"
+                          >
+                            <ClipboardIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                         <div className="mt-1 flex items-center space-x-1 text-2xs">
                           <span
                             className={
@@ -1410,7 +1629,7 @@ function formatFileSize(bytes) {
                       ))}
                       <button
                         onClick={() => handleReact(m.id, '👍')}
-                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition"
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition cursor-pointer"
                       >
                         <ThumbsUp size={14} />
                       </button>
@@ -1446,7 +1665,7 @@ function formatFileSize(bytes) {
                       m.message_type === 'user' && (
                         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => handleReport(m.id)}
+                            onClick={() => handleReport(m)}
                             className="p-1 rounded hover:bg-slate-600 transition"
                             type="button"
                           >
@@ -1656,7 +1875,7 @@ function formatFileSize(bytes) {
               </>
             ) : (
               // Placeholder if no thread selected
-              <div className="flex-1 flex items-center justify-center bg-gray-800">
+              <div className="flex-1 flex items-center justify-center 	bg-gray-200 dark:bg-gray-800">
                 <p className="text-gray-400 text-lg">
                   Select a conversation to begin
                 </p>
@@ -1722,6 +1941,7 @@ function formatFileSize(bytes) {
       {reportOpen && <ReportModal
               isOpen={reportOpen}
               contentType="message"
+              reportedUser={reportedUser}
               contentId={messageId}
               onClose={() => setReportOpen(false)}
               onSuccess={() => {

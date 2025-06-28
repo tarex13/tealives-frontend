@@ -1,7 +1,7 @@
 // src/components/Modal.jsx
 import React, { useEffect } from 'react';
 
-export default function Modal({ isOpen, onClose, title, children }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', showtop=false }) {
   // Prevent scrolling behind the modal when it’s open:
   useEffect(() => {
     if (isOpen) {
@@ -12,6 +12,13 @@ export default function Modal({ isOpen, onClose, title, children }) {
     }
   }, [isOpen]);
 
+    const sizeClass = {
+      sm: 'max-w-sm',
+      md: 'max-w-md',
+      lg: 'max-w-lg',
+      xl: 'max-w-xl',
+    }[size];
+
   if (!isOpen) return null;
 
   return (
@@ -21,8 +28,9 @@ export default function Modal({ isOpen, onClose, title, children }) {
       role="dialog"
       aria-labelledby="modal-title"
     >
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-auto relative">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full ${sizeClass} max-w-2xl mx-4 max-h-[90vh] overflow-auto relative">
         {/* Header with Title & Close Button */}
+        {showtop &&
         <div className="flex justify-between items-center p-4 border-b dark:border-gray-700">
           <h2 id="modal-title" className="text-lg font-semibold">
             {title}
@@ -34,7 +42,7 @@ export default function Modal({ isOpen, onClose, title, children }) {
           >
             &times;
           </button>
-        </div>
+        </div>}
         {/* Body */}
         <div className="p-4">{children}</div>
       </div>

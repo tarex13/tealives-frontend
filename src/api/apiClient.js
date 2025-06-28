@@ -1,11 +1,13 @@
+{/**Not being used safely delete */}
 import axios from 'axios';
 
 // Create Axios instance
 const apiClient = axios.create({
-    baseURL: 'https://your-api-domain.com/api/',  // Update this to your backend base URL
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/',  // Update this to your backend base URL
     headers: {
         'Content-Type': 'application/json',
     },
+    withCredentials: true,
 });
 
 // Intercept requests to add Authorization header
@@ -15,6 +17,7 @@ apiClient.interceptors.request.use(
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
+         config.headers['X-Requested-With'] = 'XMLHttpRequest';
         return config;
     },
     (error) => Promise.reject(error)

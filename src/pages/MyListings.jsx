@@ -22,7 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { formatDistanceToNow } from 'date-fns';
 import RelistReminderModal from '../components/RelistReminderModal';
-import MyBadges from './MyBadges';
+import SellerBadges from './SellerBadges';
 import PriceCompetitiveness from '../components/PriceCompetitiveness';
 
 export default function MyListings() {
@@ -281,7 +281,7 @@ export default function MyListings() {
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
           My Badges
         </h2>
-        <MyBadges />
+        <SellerBadges />
       </section>
 
       {/* Section: Filters & Bulk Editor */}

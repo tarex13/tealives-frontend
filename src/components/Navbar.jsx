@@ -130,9 +130,15 @@ export default function Navbar({ toggleSidebar }) {
  
 
               {user && (
-                <div className="mt-2">
-                  <NotificationDropdown isMobile onClose={() => setMobileMenuOpen(false)} />
-                </div>
+                <>
+                  <div className="mt-2 hidden md:block">
+                    <NotificationDropdown isMobile onClose={() => setMobileMenuOpen(false)} />
+                      
+                  </div>
+                  <NavLink to="/notifications"
+                className={link => `${linkClasses(link)} mt-2 md:hidden`}
+                onClick={() => setMobileMenuOpen(false)}>Notifications</NavLink>
+                </>
               )}
 
               {user ? (

@@ -1,50 +1,43 @@
 // src/pages/Auth.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate }               from 'react-router-dom';
+import { Formik, Form, Field, ErrorMessage } from 'formik';
+import * as Yup                       from 'yup';
 import {
-  login,           // This is your “login” request helper (POST /api/token/)
-  register,
+  login as apiLogin,    // POST /api/token/
+  register as apiRegister,
   fetchCities,
   fetchBusinessTypes,
 } from '../requests';
-import { useAuth } from '../context/AuthContext';
-import { FaGoogle, FaFacebook } from 'react-icons/fa';
-import '../css/Auth.css';
-import { useNotification } from '../context/NotificationContext';
-import api from '../api';
-import PhoneInput from 'react-phone-number-input';
+import api                           from '../api';
+import { useAuth }                   from '../context/AuthContext';
+import { useNotification }           from '../context/NotificationContext';
+import PhoneInput                    from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
+import { FaGoogle, FaFacebook }      from 'react-icons/fa';
+import { Helmet }                    from 'react-helmet-async';
+import '../css/Auth.css';
+
+const MINIMUM_AGE = 13;
+const today       = new Date();
+const cutoffDate  = new Date(
+  today.getFullYear() - MINIMUM_AGE,
+  today.getMonth(),
+  today.getDate()
+);
 
 export default function Auth({ isOpen, setSidebarOpen }) {
-  const [formType, setFormType] = useState('login'); // login | register | forgot
-  const [step, setStep] = useState(0);
-
-  // common fields
-  const [username, setUsername] = useState('');
-  const [usernameAvailable, setUsernameAvailable] = useState(null);
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState(null);
-
-  // register-step-1 fields
-  const [city, setCity] = useState('');
-  const [dob, setDob] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-
-  // business toggle + fields
-  const [isBusiness, setIsBusiness] = useState(false);
-  const [businessName, setBusinessName] = useState('');
-  const [businessType, setBusinessType] = useState('');
-
-  // dropdown data
-  const [cities, setCities] = useState([]);
+  const [formType, setFormType]         = useState('login'); // 'login' | 'register' | 'forgot'
+  const [step, setStep]                 = useState(0);       // register steps 0 or 1
+  const [cities, setCities]             = useState([]);
   const [businessTypes, setBusinessTypes] = useState([]);
+  const [usernameAvailable, setUsernameAvailable] = useState(null);
 
-  const { showNotification } = useNotification();
-  const { user, loginUser } = useAuth();
-  const navigate = useNavigate();
+  const { user, loginUser }             = useAuth();
+  const { showNotification }            = useNotification();
+  const navigate                        = useNavigate();
 
-  // 1️⃣ If already logged in, open sidebar + redirect home
+  // Redirect if already logged in
   useEffect(() => {
     if (user) {
       setSidebarOpen(true);
@@ -53,87 +46,79 @@ export default function Auth({ isOpen, setSidebarOpen }) {
     }
   }, [user]);
 
-  // 2️⃣ Fetch “cities” & “business types” on mount
+  // Load dropdown data
   useEffect(() => {
     fetchCities()
       .then(setCities)
       .catch(console.error);
-
     fetchBusinessTypes()
       .then(setBusinessTypes)
       .catch(console.error);
   }, []);
 
-  // 3️⃣ Username availability check
-  const checkUsername = async () => {
-    if (!username.trim()) return;
+  // Yup validation schemas
+  const loginSchema = Yup.object({
+    username: Yup.string().required('Required'),
+    password: Yup.string().required('Required'),
+  });
+
+  const registerSchemaStep0 = Yup.object({
+    username: Yup.string()
+      .matches(/^[A-Za-z0-9_.]+$/, 'Only letters, numbers, underscores & dots')
+      .min(3, 'At least 3 chars')
+      .max(30, 'Up to 30 chars')
+      .required('Required'),
+    email: Yup.string().email('Invalid email').required('Required'),
+    password: Yup.string()
+      .min(8, 'At least 8 chars')
+      .matches(/[A-Z]/, 'One uppercase letter')
+      .matches(/[a-z]/, 'One lowercase letter')
+      .matches(/[0-9]/, 'One number')
+      .matches(/[@$!%*?&]/, 'One special char')
+      .required('Required'),
+    confirmPassword: Yup.string()
+      .oneOf([Yup.ref('password')], 'Passwords must match')
+      .required('Required'),
+  });
+
+  const registerSchemaStep1 = Yup.object({
+    city: Yup.string().required('Required'),
+    dob: Yup.date()
+      .max(cutoffDate, `You must be ≥ ${MINIMUM_AGE}`)
+      .required('Required'),
+    phoneNumber: Yup.string().required('Required'),
+    isBusiness: Yup.boolean(),
+    businessName: Yup.string().when('isBusiness', {
+      is: true,
+      then: schema => schema.required('Required'),
+      otherwise: schema => schema  // optional, keeps it un-required when isBusiness is false
+    }),
+    businessType: Yup.string().when('isBusiness', {
+      is: true,
+      then: schema => schema.required('Required'),
+      otherwise: schema => schema
+    }),
+  });
+
+  const forgotSchema = Yup.object({
+    email: Yup.string().email('Invalid email').required('Required'),
+  });
+
+  // Helper to call username-check API
+  const checkUsername = async (username, form) => {
+    if (!username.trim()) return setUsernameAvailable(null);
     try {
-      const res = await api.get(`user/check-username/?username=${username}`);
+      const res = await api.get(`check-username/?username=${username}`);
       setUsernameAvailable(res.data.available);
+      if (!res.data.available) {
+        form.setFieldError('username', 'Username is taken');
+      }
     } catch {
       setUsernameAvailable(null);
     }
   };
 
-  // 4️⃣ Handle “submit” for login / register / forgot
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-
-    try {
-      if (formType === 'login') {
-        // Instead of passing “access” into loginUser, call loginUser({ username, password })
-        const success = await loginUser({ username, password });
-        if (success) {
-          setSidebarOpen(true);
-          navigate('/');
-        } else {
-          setError('Invalid credentials.');
-          setPassword('');
-        }
-      } else if (formType === 'register') {
-        if (step === 0) {
-          if (!usernameAvailable) {
-            setError('Please choose an available username.');
-            return;
-          }
-          setStep(1);
-          return;
-        }
-
-        // build registration payload
-        const payload = {
-          username,
-          email,
-          password,
-          city,
-          dob,
-          phone_number: phoneNumber,
-          is_business: isBusiness,
-        };
-        if (isBusiness) {
-          payload.business_name = businessName;
-          payload.business_type = businessType;
-        }
-
-        await register(payload);
-
-        setFormType('login');
-        setStep(0);
-        showNotification('Account created! Log in to continue.');
-        navigate('/profile/edit');
-      } else if (formType === 'forgot') {
-        // trigger password reset flow
-        alert('Password reset link sent to your email.');
-        setFormType('login');
-      }
-    } catch {
-      setError('Authentication failed. Please try again.');
-      setPassword('');
-    }
-  };
-
-  // Progress bar for registration steps
+  // Render the step-progress bar (only on register)
   const renderStepProgress = () => {
     if (formType !== 'register') return null;
     return (
@@ -148,280 +133,361 @@ export default function Auth({ isOpen, setSidebarOpen }) {
   };
 
   return (
-    <div className="auth-wrapper min-h-screen flex flex-col md:flex-row items-center justify-center bg-gradient-to-br dark:from-gray-800 from-gray-100 to-white relative overflow-hidden px-4">
-      <div className="blob blob1" />
-      <div className="blob blob2" />
+    <>
+      {/* Dynamic page title */}
+      <Helmet>
+        <title>
+          {formType === 'login' ? 'Login' :
+           formType === 'register' ? 'Register' :
+           'Reset Password'} | Tealives
+        </title>
+      </Helmet>
 
-      <div className="branding mb-10 md:mb-0 md:mr-20 text-center md:text-left z-10">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Tealives</h1>
-        <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 leading-relaxed max-w-md">
-          Life’s Happening in Your City. <br />
-          Join Conversations, Events & Marketplaces.
-        </p>
-      </div>
+      <div className="auth-wrapper min-h-screen flex flex-col md:flex-row items-center justify-center bg-gradient-to-br dark:from-gray-800 from-gray-100 to-white relative overflow-hidden px-4">
+        <div className="blob blob1" />
+        <div className="blob blob2" />
 
-      <div className="form-card bg-white shadow-xl text-black rounded-lg p-6 w-full max-w-sm z-10">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <h2 className="text-center text-lg font-medium capitalize">
-            {formType === 'login'
-              ? 'Login'
-              : formType === 'register'
-              ? `Register – Step ${step + 1} of 2`
-              : 'Reset Password'}
-          </h2>
+        <div className="branding mb-10 md:mb-0 md:mr-20 text-center md:text-left z-10">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            Tealives
+          </h1>
+          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 leading-relaxed max-w-md">
+            Life’s Happening in Your City.<br/>Join Conversations, Events & Marketplaces.
+          </p>
+        </div>
 
-          {renderStepProgress()}
-          {error && <p className="text-red-600 text-sm text-center">{error}</p>}
-
-          {/* ───── LOGIN FIELDS ───── */}
-          {formType === 'login' && (
-            <>
-              <input
-                type="text"
-                placeholder="Username or Email"
-                className="input-style"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                className="input-style"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </>
-          )}
-
-          {/* ───── REGISTER – STEP 0 ───── */}
-          {formType === 'register' && step === 0 && (
-            <>
-              <input
-                type="text"
-                placeholder="Username"
-                className="input-style"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  setUsernameAvailable(null);
-                }}
-                onBlur={checkUsername}
-                required
-              />
-              {username && usernameAvailable !== null && (
-                <p
-                  className={`text-sm ${
-                    usernameAvailable ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  {usernameAvailable
-                    ? '✅ Username is available'
-                    : '❌ Username is taken'}
-                </p>
-              )}
-
-              <input
-                type="email"
-                placeholder="Email"
-                className="input-style"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                className="input-style"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-
-              {/* business toggle */}
-              <div className="flex items-center">
-                <input
-                  id="isBusiness"
-                  type="checkbox"
-                  checked={isBusiness}
-                  onChange={() => setIsBusiness((b) => !b)}
-                  className="mr-2"
-                />
-                <label htmlFor="isBusiness" className="text-sm">
-                  Register as Business
-                </label>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center mt-1">
-                By signing up, you agree to our{' '}
-                <a href="/terms" className="text-blue-600 hover:underline">
-                  Terms
-                </a>{' '}
-                and{' '}
-                <a href="/privacy" className="text-blue-600 hover:underline">
-                  Privacy Policy
-                </a>
-                .
-              </p>
-            </>
-          )}
-
-          {/* ───── REGISTER – STEP 1 ───── */}
-          {formType === 'register' && step === 1 && (
-            <>
-              <select
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="input-style"
-                required
-              >
-                <option value="">Select your city</option>
-                {cities.map((c) => (
-                  <option key={c} value={c}>
-                    {c.charAt(0).toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="date"
-                className="input-style"
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-                required
-              />
-
-              <PhoneInput
-                defaultCountry="CA"
-                value={phoneNumber}
-                onChange={setPhoneNumber}
-                placeholder="+1 204 555 6789"
-                className="input-style"
-              />
-
-              {/* business fields */}
-              {isBusiness && (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Business Name"
-                    className="input-style"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    required
-                  />
-                  <select
-                    value={businessType}
-                    onChange={(e) => setBusinessType(e.target.value)}
-                    className="input-style"
-                    required
-                  >
-                    <option value="">Select Business Type</option>
-                    {businessTypes.map((bt) => (
-                      <option key={bt} value={bt}>
-                        {bt.charAt(0).toUpperCase() + bt.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-            </>
-          )}
-
-          {/* ───── FORGOT PASSWORD ───── */}
-          {formType === 'forgot' && (
-            <input
-              type="email"
-              placeholder="Email"
-              className="input-style"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          )}
-
-          {/* ───── BUTTONS ───── */}
-          <div className="flex gap-2">
-            {formType === 'register' && step > 0 && (
-              <button
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="flex-1 bg-gray-300 text-black py-2 rounded hover:bg-gray-400"
-              >
-                Back
-              </button>
-            )}
-            <button
-              type="submit"
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 rounded transition"
-            >
-              {formType === 'login'
-                ? 'Log In'
+        <div className="form-card bg-white shadow-xl text-black rounded-lg p-6 w-full max-w-sm z-10">
+          <Formik
+            initialValues={{
+              username: '',
+              email: '',
+              password: '',
+              confirmPassword: '',
+              city: '',
+              dob: '',
+              phoneNumber: '',
+              isBusiness: false,
+              businessName: '',
+              businessType: '',
+            }}
+            validationSchema={
+              formType === 'login'
+                ? loginSchema
                 : formType === 'register'
-                ? step < 1
-                  ? 'Next'
-                  : 'Sign Up'
-                : 'Send Reset Link'}
-            </button>
-          </div>
+                ? (step === 0 ? registerSchemaStep0 : registerSchemaStep1)
+                : forgotSchema
+            }
+            onSubmit={async (values, actions) => {
+              const { setSubmitting, setFieldError, resetForm } = actions;
+              setSubmitting(true);
 
-          {/* ───── LINKS ───── */}
-          <div className="text-xs text-center text-gray-500 space-x-2 mt-4">
-            {formType !== 'login' && (
-              <span
-                className="text-blue-600 cursor-pointer"
-                onClick={() => {
+              try {
+                if (formType === 'login') {
+                  // LOGIN
+                  const ok = await loginUser({
+                    username: values.username,
+                    password: values.password
+                  });
+                  if (ok) {
+                    setSidebarOpen(true);
+                    navigate('/');
+                  } else {
+                    setFieldError('password', 'Invalid credentials');
+                  }
+
+                } else if (formType === 'register') {
+                  if (step === 0) {
+                    // STEP 0 → STEP 1
+                    if (usernameAvailable !== true) {
+                      setFieldError('username', 'Please choose an available username');
+                    } else {
+                      setStep(1);
+                      // clear any step-0 touched state so step-1 fields start fresh
+                      actions.setTouched({});
+                    }
+                  } else {
+                    // FINAL REGISTER
+                    const payload = {
+                      username:      values.username,
+                      email:         values.email,
+                      password:      values.password,
+                      city:          values.city,
+                      dob:           values.dob,
+                      phone_number:  values.phoneNumber,
+                      is_business:   values.isBusiness,
+                      ...(values.isBusiness && {
+                        business_name: values.businessName,
+                        business_type: values.businessType
+                      })
+                    };
+                  // 1) Create the user
+                  await apiRegister(payload);
+
+                  // 2) Auto-login & send them to Edit Profile
+                  const ok = await loginUser(
+                    { username: values.username, password: values.password },
+                    '/profile/edit'
+                  );
+                  if (!ok) {
+                    // fallback: let them log in manually
+                    showNotification('Account created! Please log in to continue.');
+                    setFormType('login');
+                    setStep(0);
+                  }
+                  }
+
+                } else if (formType === 'forgot') {
+                  // FORGOT PASSWORD
+                  // (you can replace this with a real API call)
+                  showNotification('Password reset link sent to your email.');
                   setFormType('login');
                   setStep(0);
-                }}
-              >
-                Back to Login
-              </span>
-            )}
-            {formType !== 'register' && (
-              <span
-                className="text-blue-600 cursor-pointer"
-                onClick={() => {
-                  setFormType('register');
-                  setStep(0);
-                }}
-              >
-                Sign Up
-              </span>
-            )}
-            {formType !== 'forgot' && (
-              <span
-                className="text-blue-600 cursor-pointer"
-                onClick={() => setFormType('forgot')}
-              >
-                Forgot?
-              </span>
-            )}
-          </div>
-
-          {/* ───── SOCIAL ICONS ───── */}
-          <div className="flex justify-center items-center gap-4 mt-2">
-            <FaGoogle
-              size={20}
-              className="text-gray-700 cursor-pointer hover:text-orange-500"
-            />
-            <FaFacebook
-              size={20}
-              className="text-gray-700 cursor-pointer hover:text-blue-600"
-            />
-          </div>
-
-          {/* ───── GUEST BUTTON ───── */}
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="text-sm w-full mt-4 text-gray-600 underline hover:text-gray-800 transition"
+                  resetForm();
+                }
+              } catch (err) {
+                // map server errors to fields
+                if (err.response?.data) {
+                  Object.entries(err.response.data).forEach(([field, msg]) => {
+                    setFieldError(field, Array.isArray(msg) ? msg.join(' ') : msg);
+                    showNotification(msg);
+                  });
+                } else {
+                  showNotification('Something went wrong. Please try again.');
+                }
+              } finally {
+                setSubmitting(false);
+              }
+            }}
           >
-            Explore as Guest
-          </button>
-        </form>
+            {formik => (
+              <Form className="space-y-4">
+                <h2 className="text-center text-lg font-medium capitalize">
+                  {formType === 'login'
+                    ? 'Login'
+                    : formType === 'register'
+                    ? `Register – Step ${step + 1} of 2`
+                    : 'Reset Password'}
+                </h2>
+
+                {renderStepProgress()}
+
+                {/* LOGIN */}
+                {formType === 'login' && (
+                  <>
+                    <Field
+                      name="username"
+                      type="text"
+                      placeholder="Username or Email"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="username" component="div" className="text-red-600 text-sm"/>
+                    <Field
+                      name="password"
+                      type="password"
+                      placeholder="Password"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="password" component="div" className="text-red-600 text-sm"/>
+                  </>
+                )}
+
+                {/* REGISTER STEP 0 */}
+                {formType === 'register' && step === 0 && (
+                  <>
+                    <Field name="username">
+                      {({ field, form }) => (
+                        <input
+                          {...field}
+                          type="text"
+                          placeholder="Username"
+                          className="input-style"
+                          onBlur={async e => {
+                            field.onBlur(e);
+                            await checkUsername(field.value, form);
+                          }}
+                        />
+                      )}
+                    </Field>
+                    <ErrorMessage name="username" component="div" className="text-red-600 text-sm"/>
+                    {formik.values.username && usernameAvailable !== null && (
+                      <p className={`text-sm ${
+                        usernameAvailable ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {usernameAvailable
+                          ? '✅ Username is available'
+                          : '❌ Username is taken'}
+                      </p>
+                    )}
+
+                    <Field
+                      name="email"
+                      type="email"
+                      placeholder="Email"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="email" component="div" className="text-red-600 text-sm"/>
+
+                    <Field
+                      name="password"
+                      type="password"
+                      placeholder="Password"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="password" component="div" className="text-red-600 text-sm"/>
+
+                    <Field
+                      name="confirmPassword"
+                      type="password"
+                      placeholder="Confirm Password"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="confirmPassword" component="div" className="text-red-600 text-sm"/>
+
+                    <div className="flex items-center">
+                      <Field name="isBusiness" type="checkbox" />
+                      <label htmlFor="isBusiness" className="ml-2 text-sm">
+                        Register as Business
+                      </label>
+                    </div>
+
+                    <p className="text-xs text-gray-500 text-center mt-1">
+                      By signing up, you agree to our{' '}
+                      <a href="/terms" className="text-blue-600 hover:underline">Terms</a>{' '}
+                      and{' '}
+                      <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>.
+                    </p>
+                  </>
+                )}
+
+                {/* REGISTER STEP 1 */}
+                {formType === 'register' && step === 1 && (
+                  <>
+                    <Field as="select" name="city" className="input-style">
+                      <option value="">Select your city</option>
+                      {cities.map(c => (
+                        <option key={c} value={c}>
+                          {c.charAt(0).toUpperCase() + c.slice(1)}
+                        </option>
+                      ))}
+                    </Field>
+                    <ErrorMessage name="city" component="div" className="text-red-600 text-sm"/>
+
+                    <Field name="dob" type="date" className="input-style" />
+                    <ErrorMessage name="dob" component="div" className="text-red-600 text-sm"/>
+
+                    <PhoneInput
+                      defaultCountry="CA"
+                      value={formik.values.phoneNumber}
+                      onChange={val => formik.setFieldValue('phoneNumber', val)}
+                      className="input-style"
+                    />
+                    <ErrorMessage name="phoneNumber" component="div" className="text-red-600 text-sm"/>
+
+                    {formik.values.isBusiness && (
+                      <>
+                        <Field
+                          name="businessName"
+                          type="text"
+                          placeholder="Business Name"
+                          className="input-style"
+                        />
+                        <ErrorMessage name="businessName" component="div" className="text-red-600 text-sm"/>
+
+                        <Field as="select" name="businessType" className="input-style">
+                          <option value="">Select Business Type</option>
+                          {businessTypes.map(bt => (
+                            <option key={bt} value={bt}>
+                              {bt.charAt(0).toUpperCase() + bt.slice(1)}
+                            </option>
+                          ))}
+                        </Field>
+                        <ErrorMessage name="businessType" component="div" className="text-red-600 text-sm"/>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* FORGOT */}
+                {formType === 'forgot' && (
+                  <>
+                    <Field
+                      name="email"
+                      type="email"
+                      placeholder="Email"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="email" component="div" className="text-red-600 text-sm"/>
+                  </>
+                )}
+
+                {/* Navigation Buttons */}
+                <div className="flex gap-2">
+                  {formType === 'register' && step > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setStep(s => s - 1); }}
+                      className="flex-1 bg-gray-300 text-black py-2 rounded hover:bg-gray-400"
+                    >
+                      Back
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={formik.isSubmitting}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 rounded transition"
+                  >
+                    {formType === 'login'
+                      ? 'Log In'
+                      : formType === 'register'
+                      ? step === 0 ? 'Next' : 'Sign Up'
+                      : 'Send Reset Link'}
+                  </button>
+                </div>
+
+                {/* Switch Links */}
+                <div className="text-xs text-center text-gray-500 space-x-2 mt-4">
+                  {formType !== 'login' && (
+                    <span className="text-blue-600 cursor-pointer" onClick={() => {
+                      setFormType('login');
+                      setStep(0);
+                      formik.resetForm();
+                    }}>Back to Login</span>
+                  )}
+                  {formType !== 'register' && (
+                    <span className="text-blue-600 cursor-pointer" onClick={() => {
+                      setFormType('register');
+                      setStep(0);
+                      formik.resetForm();
+                    }}>Sign Up</span>
+                  )}
+                  {formType !== 'forgot' && (
+                    <span className="text-blue-600 cursor-pointer" onClick={() => {
+                      setFormType('forgot');
+                      setStep(0);
+                      formik.resetForm();
+                    }}>Forgot?</span>
+                  )}
+                </div>
+
+                {/* Social Icons */}
+                <div className="flex justify-center items-center gap-4 mt-2">
+                  <FaGoogle size={20} className="text-gray-700 cursor-pointer hover:text-orange-500"/>
+                  <FaFacebook size={20} className="text-gray-700 cursor-pointer hover:text-blue-600"/>
+                </div>
+
+                {/* Explore as Guest */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/')}
+                  className="text-sm w-full mt-4 text-gray-600 underline hover:text-gray-800 transition"
+                >
+                  Explore as Guest
+                </button>
+              </Form>
+            )}
+          </Formik>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

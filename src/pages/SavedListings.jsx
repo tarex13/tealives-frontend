@@ -4,6 +4,7 @@ import { fetchSavedListings, toggleSaveListing } from '../requests';
 import { useAuth } from '../context/AuthContext';
 import MarketplaceCard from './MarketplaceCard';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 export default function SavedListings() {
   const { user } = useAuth();
@@ -22,7 +23,7 @@ export default function SavedListings() {
     setError(null);
     try {
       const res = await fetchSavedListings();
-      const data = Array.isArray(res.data) ? res.data : [];
+      const data = Array.isArray(res.data.results) ? res.data.results : [];
       setItems(data);
     } catch (err) {
       console.error('Failed to load saved listings:', err);
@@ -58,6 +59,9 @@ export default function SavedListings() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <Helmet>
+        <title>Saved Listings | Tealives</title>
+      </Helmet>
       <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
         Saved Listings
       </h1>

@@ -1,5 +1,7 @@
+{/*not currently being used*/}
+
 import React, { useEffect, useState } from 'react';
-import apiClient from '../api/apiClient'; // Assuming Axios setup
+import api from '../api'; // Assuming Axios setup
 import { Button } from '@/components/ui/button';
 
 const PinnedContentBar = () => {
@@ -8,7 +10,7 @@ const PinnedContentBar = () => {
 
     const fetchPinnedContent = async () => {
         try {
-            const response = await apiClient.get('pin/'); // API should handle filtering expired content
+            const response = await api.get('pin/'); // API should handle filtering expired content
             setPinnedItems(response.data);
             setError('');
         } catch (err) {

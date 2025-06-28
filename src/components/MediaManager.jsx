@@ -97,7 +97,7 @@ function MediaManager({ mediaFiles, setMediaFiles, openEditor }) {
           <MediaPreviewCard
             key={fileObj.id}
             fileObj={fileObj}
-            onEdit={() => handleEdit(fileObj)}
+            onEdit={handleEdit}
             onDelete={() => handleDelete(fileObj.id)}
             onReplace={(newFile) => handleReplace(fileObj.id, newFile)}
             onCaptionChange={(caption) => handleCaptionChange(fileObj.id, caption)}

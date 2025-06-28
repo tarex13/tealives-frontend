@@ -1,9 +1,10 @@
+{/**This page is good but currently not implemented */}
 import React, { useEffect, useState } from 'react';
 import { getGroupEvents, createGroupEvent } from '../requests';
 import { useParams } from 'react-router-dom';
 
-// Simple Toast Replacement
-const showToast = (message) => alert(message);
+import { useNotification } from '../context/NotificationContext';
+
 
 export default function GroupEventsPage() {
   const { id } = useParams();
@@ -12,7 +13,7 @@ export default function GroupEventsPage() {
   const [title, setTitle] = useState('');
   const [datetime, setDatetime] = useState('');
   const [location, setLocation] = useState('');
-
+  const { showNotification } = useNotification();
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -22,25 +23,25 @@ export default function GroupEventsPage() {
       const response = await getGroupEvents(id);
       setEvents(response.data);
     } catch {
-      showToast('Failed to load events.');
+      showNotification('Failed to load events.', 'error');
     }
   };
 
   const handleCreateEvent = async () => {
     if (!title.trim() || !datetime) {
-      return showToast('Title and date/time required.');
+      return showNotification('Title and date/time required.', 'error');
     }
 
     try {
       await createGroupEvent(id, { title, datetime, location });
-      showToast('Event created successfully.');
+      showNotification('Event created successfully.', 'success');
       setOpen(false);
       setTitle('');
       setDatetime('');
       setLocation('');
       fetchEvents();
     } catch {
-      showToast('Failed to create event.');
+      showNotification('Failed to create event.', 'error');
     }
   };
 

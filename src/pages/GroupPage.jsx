@@ -1,3 +1,5 @@
+{/*Currently not being used*/}
+
 import React, { useEffect, useState } from 'react';
 import { getGroups, createGroup } from '../requests';
 import GroupCard from '../components/GroupCard';

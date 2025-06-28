@@ -240,6 +240,7 @@ export default function MarkSoldModal({ itemId, onClose, onSoldComplete }) {
       {buyerForRating  && (
         <RateUserModal
           buyerId={buyerForRating.id}
+          itemId={itemId}
           onClose={() => {
             setRatingOpen(false);
             onClose();

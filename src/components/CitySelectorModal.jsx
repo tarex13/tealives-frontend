@@ -1,6 +1,7 @@
 // src/components/CitySelectorModal.jsx
 import React, { useEffect, useState } from 'react'
 import { useCity } from '../context/CityContext'
+import { Link } from 'react-router-dom';
 
 export default function CitySelectorModal() {
   const { city, setCity, cities } = useCity()
@@ -81,7 +82,21 @@ export default function CitySelectorModal() {
         <p className="text-center text-xs text-gray-400 dark:text-gray-500">
           You can always change this later.
         </p>
+        {/* ———————————————————————————————————————————————— */}
+     {/* Terms notice: */}
+     <p className="mt-4  text-center text-xs text-gray-600">
+       By continuing, you agree to our{' '}
+       <Link to="/terms" className="underline hover:text-gray-800">
+         Terms of Service
+       </Link>{' '}
+       and{' '}
+       <Link to="/privacy" className="underline hover:text-gray-800">
+         Privacy Policy
+       </Link>.
+     </p>
+     {/* ———————————————————————————————————————————————— */}
       </div>
+          
     </div>
   )
 }

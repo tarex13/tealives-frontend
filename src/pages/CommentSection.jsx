@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 // Recursive Comment Component
 function Comment({ comment, depth = 0, replyTo, onReply, onSubmitReply, user }) {
     const [replyText, setReplyText] = useState('');
+    console.log(depth);
 
     return (
         <div className="ml-4 mt-2">
@@ -14,7 +15,7 @@ function Comment({ comment, depth = 0, replyTo, onReply, onSubmitReply, user }) 
                 </p>
                 <p className="mb-1">{comment.content}</p>
 
-                {depth < 5 && (
+                {depth < 2 && (
                     <button
                         onClick={() => onReply(comment.id)}
                         className="text-xs text-blue-600 hover:underline"

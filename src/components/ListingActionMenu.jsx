@@ -6,7 +6,7 @@ import {
   toggleSaveListing,
   deleteListing,
   relistListing,
-  getOrCreateConversation,
+  //getOrCreateConversation,
 } from '../requests';
 
 import ReportModal from './ReportModal';
@@ -99,12 +99,12 @@ export default function ListingActionMenu({
       return;
     }
     try {
-      const res = await getOrCreateConversation(id);
+      //const res = await getOrCreateConversation(id);
       // Now res.data contains:
       // { conversation_id, item_id, item_title, item_price, item_status, item_thumbnail }
-      const convoId = res.data.conversation_id;
+      //const convoId = res.data.conversation_id;
       // Navigate into Inbox, passing both “conversation” and “to” (seller’s id).
-      navigate(`/inbox?conversation=${convoId}&to=${seller?.id}`);
+      navigate(`/inbox?item=${id}&to=${seller?.id}`);
     } catch {
       alert('Could not open chat.');
     }

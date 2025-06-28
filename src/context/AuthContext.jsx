@@ -221,7 +221,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ─── Login: POST credentials → get {access, refresh} → fetch profile ───────────
-  const loginUser = async ({ username, password }) => {
+  const loginUser = async ({ username, password }, redirectTo = '/') => {
     console.log('[AuthContext] loginUser() called');
     try {
       const response = await api.post('token-login/', { username, password });
@@ -245,11 +245,10 @@ export const AuthProvider = ({ children }) => {
           setUser(profile);
           scheduleSilentRefresh(access);
 
-          // ─── Redirect to “/” immediately after successful login ─────────
-          // If we’re not already at “/”, send the user there:
-          if (location.pathname !== '/') {
-            console.log('[AuthContext] loginUser(): redirecting to "/"');
-            window.location.href = '/';
+          // ─── Redirect to `redirectTo` after successful login ─────────
+          if (location.pathname !== redirectTo) {
+            console.log(`[AuthContext] loginUser(): redirecting to "${redirectTo}"`);
+            window.location.href = redirectTo;
           }
         }
         return true;
@@ -266,6 +265,8 @@ export const AuthProvider = ({ children }) => {
       return false;
     }
   };
+
+  
 
   // ─── Exposed helper to manually force a refresh (for a “Refresh” button) ─────
   const updateAccessToken = async () => {
@@ -338,7 +339,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loginUser, logoutUser, updateAccessToken, loading }}
+      value={{ user, loginUser, logoutUser, updateAccessToken, setUser, loading }}
     >
       {children}
     </AuthContext.Provider>

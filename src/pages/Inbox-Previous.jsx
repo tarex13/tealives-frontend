@@ -119,9 +119,9 @@ export default function Inbox({ setSidebarMinimized }) {
   const [showMarkSoldModal, setShowMarkSoldModal] = useState(false);
 
   function extractUrl(text) {
-  const m = text.match(/https?:\/\/\S+/);
-  return m ? m[0] : null;
-}
+    const m = text.match(/https?:\/\/\S+/);
+    return m ? m[0] : null;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1️⃣ Fetch threads initially (and auto-open if needed) :contentReference[oaicite:0]{index=0}

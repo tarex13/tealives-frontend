@@ -13,6 +13,7 @@ import EventCard from '../components/EventCard'
 import CitySelectorModal from '../components/CitySelectorModal'
 import { useAuth } from '../context/AuthContext'
 import { useCity } from '../context/CityContext'
+import { Helmet } from 'react-helmet-async';
 
 /**
  * CityFilter
@@ -192,6 +193,9 @@ export default function Home() {
 
   return (
     <>
+      <Helmet>
+        <title>Feed | Tealives</title>
+      </Helmet>
       {/* Desktop CreatePost */}
       {user && (
         <div className="hidden md:block max-w-3xl mx-auto p-4 animate-fade-in-up text-gray-800 dark:text-white">

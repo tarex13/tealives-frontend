@@ -15,6 +15,7 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${access}`;
       console.log('[api] Attached access token');
     }
+     config.headers['X-Requested-With'] = 'XMLHttpRequest';
     return config;
   },
   error => Promise.reject(error)
@@ -46,6 +47,7 @@ api.interceptors.response.use(
 
         // Retry original request with new token
         origReq.headers.Authorization = `Bearer ${access}`;
+        origReq.headers['X-Requested-With'] = 'XMLHttpRequest';
         return api(origReq);
       } catch (refreshErr) {
         console.error('[api] Refresh failed:', refreshErr);

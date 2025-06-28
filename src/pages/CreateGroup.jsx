@@ -18,7 +18,7 @@ export default function CreateGroup() {
   const [loading, setLoading] = useState(false);
   const [showInviteSection, setShowInviteSection] = useState(false);
   const { showNotification } = useNotification();
-  const { CITIES } = useCity();
+  const { cities } = useCity();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -99,7 +99,7 @@ export default function CreateGroup() {
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white shadow-md rounded-lg mt-8">
+    <div className="max-w-md mx-auto p-6 bg-white dark:bg-gray-800 shadow-md rounded-lg mt-8">
       <h2 className="text-2xl font-bold mb-4 text-center">Create a New Group</h2>
 
       {!showInviteSection ? (
@@ -146,7 +146,7 @@ export default function CreateGroup() {
               className="border p-2 w-full rounded"
             >
               <option value="">Select City</option>
-              {CITIES.map((city) => (
+              {cities.map((city) => (
                 <option key={city} value={city}>
                   {city}
                 </option>
@@ -179,7 +179,7 @@ export default function CreateGroup() {
           </div>
 
           <div>
-            <label htmlFor="max-members" className="block font-medium mb-1">Max Members</label>
+            <label htmlFor="max-members" className="block font-medium mb-1">Max Members (Optional)</label>
             <input
               id="max-members"
               type="number"
@@ -194,7 +194,7 @@ export default function CreateGroup() {
           </div>
 
           <div>
-            <label htmlFor="avatar" className="block font-medium mb-1">Group Avatar (Optional)</label>
+            <label htmlFor="avatar" className="block font-medium mb-1">Group Banner (Optional)</label>
             <input
               id="avatar"
               type="file"

@@ -48,6 +48,7 @@ export default function EditPostPage() {
               ? post.poll_details.options.map((o) => o.text)
               : ['', ''],
           expiresAt:   post.poll_details?.expires_at || '',
+          ownerId: post.ownerId,
         });
       } catch (err) {
         console.error(err);

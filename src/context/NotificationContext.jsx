@@ -15,6 +15,10 @@ export const useNotification = () => useContext(NotificationContext);
 
 export const NotificationProvider = ({ children }) => {
       const { user } = useAuth();
+  // track whether WS ever successfully opened
+  const [wsConnected, setWsConnected] = useState(false);
+  // keep our poll interval ID
+  const pollRef = useRef(null);
   // Toast state
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState('info');
@@ -59,7 +63,7 @@ export const NotificationProvider = ({ children }) => {
   const showNotification = (msg, type = 'info') => {
     setToastMsg(msg);
     setToastType(type);
-    setTimeout(() => setToastMsg(''), 3000);
+    setTimeout(() => setToastMsg(''), 7000);
   };
 
   // WebSocket ref
@@ -68,8 +72,14 @@ export const NotificationProvider = ({ children }) => {
 useEffect(() => {
   if (!user) return;
 
-  fetchNotifications(); // Initial fetch
-  const iv = setInterval(fetchNotifications, 30000); // Poll every 30s
+  fetchNotifications(); // Initial: always get latest
+
+  // If WS never connects, we'll start polling:
+  const startPolling = () => {
+    if (!pollRef.current) {
+      pollRef.current = setInterval(fetchNotifications, 10000);
+    }
+  };
 
   const token = localStorage.getItem('accessToken');
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -86,7 +96,14 @@ useEffect(() => {
   ws.current = socket;
 
   socket.onopen = () => {
-    console.log('Notifications WS connected');
+    setWsConnected(true);
+    // stop any fallback polling
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    // refresh once in case we missed any
+    fetchNotifications();
   };
 
   socket.onmessage = ({ data }) => {
@@ -97,6 +114,8 @@ useEffect(() => {
 
   socket.onclose = (e) => {
     console.log('Notifications WS disconnected', e);
+    // if we never got a successful open, fallback to polling
+    if (!wsConnected) { startPolling(); }
   };
 
   socket.onerror = (e) => {
@@ -104,7 +123,11 @@ useEffect(() => {
   };
 
   return () => {
-    clearInterval(iv);
+    // teardown polling
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.close();
     }
@@ -130,10 +153,11 @@ useEffect(() => {
       {/* In-page toast */}
       {toastMsg && (
         <div
-          className={`fixed top-[20vh] right-4 p-3 rounded shadow-lg text-white transition-opacity ${
+          className={`fixed top-20 right-4 p-3 rounded shadow-lg text-white transition-opacity ${
             toastType === 'error'
               ? 'bg-red-500'
               : toastType === 'success'
+
               ? 'bg-green-500'
               : 'bg-blue-500'
           }`}

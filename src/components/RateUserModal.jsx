@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { rateUser } from '../requests'; // :contentReference[oaicite:8]{index=8}
 
-const RateUserModal = ({ buyerId, onClose }) => {
+const RateUserModal = ({ buyerId, onClose, itemId }) => {
   const [score, setScore] = useState(5);
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -15,6 +15,7 @@ const RateUserModal = ({ buyerId, onClose }) => {
         to_user: buyerId,
         rating: score,
         comment: message,
+        related_item: itemId,
       });
       alert('Rating submitted!');
       onClose();

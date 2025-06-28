@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchBids, takeBidAction, markItemSold } from '../requests';
 import BidItem from './BidItem';
 
-export default function BidList({ itemId, onActionSuccess }) {
+export default function BidList({ itemId, messageBuyer, onActionSuccess }) {
   const [bids, setBids] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,6 +75,7 @@ export default function BidList({ itemId, onActionSuccess }) {
         <ul className="space-y-4">
           {bids.map((bid) => (
             <BidItem
+              messageBuyer={messageBuyer}
               key={bid.id}
               bid={bid}
               onAction={(action) => handleAction(bid.id, bid.bidder, action)}

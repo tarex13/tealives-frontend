@@ -1,9 +1,10 @@
-// src/pages/CreateEvent.jsx
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useNotification } from '../context/NotificationContext'
-import { createEvent } from '../requests'
+import { createEvent, updateEvent, fetchEventDetail } from '../requests'
+import { parseISO, format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
+import { useAuth } from '../context/AuthContext'
 import {
   FaMapMarkerAlt,
   FaClock,
@@ -13,36 +14,79 @@ import {
   FaAngleDown,
   FaAngleUp,
 } from 'react-icons/fa'
-import { useCity } from '../context/CityContext'     // pull in our reactive city list
+import { useCity } from '../context/CityContext'
 
 const TAG_OPTIONS = [
-  'Tech',
-  'Networking',
-  'Music',
-  'Art',
-  'Fitness',
-  'Business',
-  'Social',
-  'Education',
-]
-const CATEGORY_OPTIONS = [
-  'conference',
-  'meetup',
-  'workshop',
-  'party',
-  'other',
-]
+  { value: 'tech',           label: 'Tech' },
+  { value: 'networking',     label: 'Networking' },
+  { value: 'music',          label: 'Music' },
+  { value: 'art',            label: 'Art' },
+  { value: 'fitness',        label: 'Fitness' },
+  { value: 'business',       label: 'Business' },
+  { value: 'social',         label: 'Social' },
+  { value: 'education',      label: 'Education' },
+  { value: 'food_drink',     label: 'Food & Drink' },
+  { value: 'wellness',       label: 'Wellness' },
+  { value: 'family',         label: 'Family' },
+  { value: 'outdoors',       label: 'Outdoors' },
+  { value: 'marketplace',    label: 'Marketplace' },
+  { value: 'charity',        label: 'Charity' },
+  { value: 'holiday',        label: 'Holiday' },
+  { value: 'startup',        label: 'Startup' },
+  { value: 'pets',           label: 'Pets' },
+  { value: 'gaming',         label: 'Gaming' },
+  { value: 'photography',    label: 'Photography' },
+];
+export const CATEGORY_OPTIONS = [
+  { value: 'music_concerts',        label: 'Music & Concerts' },
+  { value: 'food_drink',            label: 'Food & Drink' },
+  { value: 'arts_culture',          label: 'Arts & Culture' },
+  { value: 'sports_fitness',        label: 'Sports & Fitness' },
+  { value: 'classes_workshops',     label: 'Classes & Workshops' },
+  { value: 'networking_business',   label: 'Networking & Business' },
+  { value: 'family_kids',           label: 'Family & Kids' },
+  { value: 'health_wellness',       label: 'Health & Wellness' },
+  { value: 'tech_startups',         label: 'Tech & Startups' },
+  { value: 'community_civic',       label: 'Community & Civic' },
+  { value: 'markets_fairs',         label: 'Markets & Fairs' },
+  { value: 'film_media',            label: 'Film & Media' },
+  { value: 'outdoors_adventure',    label: 'Outdoors & Adventure' },
+  { value: 'holiday_seasonal',      label: 'Holiday & Seasonal' },
+  { value: 'charity_fundraising',   label: 'Charity & Fundraising' },
+  { value: 'other',                 label: 'Other' },
+];
 
-export default function CreateEvent() {
+
+// Helper to convert an ISO datetime string (with offset) to a "yyyy-MM-dd'T'HH:mm" string
+function formatForDateTimeLocal(isoString) {
+  if (!isoString) return ''
+  try {
+    // Parse ISO string into a Date. parseISO handles the offset part.
+    const parsed = parseISO(isoString)
+    // Optionally convert to the user's timezone:
+    const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const zoned = toZonedTime(parsed, userTZ)
+    // Format as "YYYY-MM-DDTHH:mm" for datetime-local
+    return format(zoned, "yyyy-MM-dd'T'HH:mm")
+  } catch (err) {
+    console.error('Failed to parse/format datetime:', err)
+    return ''
+  }
+}
+
+export default function CreateEvent({ isEdit = false }) {
+  const { id: paramId } = useParams()
+  const eventId = paramId ? parseInt(paramId, 10) : null
   const navigate = useNavigate()
   const { showNotification } = useNotification()
-  const { cities } = useCity()                      // get dynamic cities array from context
+  const { cities, city: City } = useCity()
 
+  const { user } = useAuth()
   const [form, setForm] = useState({
     title: '',
     description: '',
     location: '',
-    city: '',          // selected city from dropdown
+    city: '',
     start_time: '',
     rsvp_deadline: '',
     rsvp_limit: '',
@@ -56,42 +100,93 @@ export default function CreateEvent() {
     minimum_age_required: false,
     minimum_age: '',
   })
-
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [showExtras, setShowExtras] = useState(false)
 
-  // Handle general input changes (text, select, checkbox)
-  const handleChange = (e) => {
+  // Prefill on edit
+  useEffect(() => {
+    if (!isEdit) return
+    if (!eventId) {
+      setError('Invalid event ID.')
+      return
+    }
+
+    let canceled = false
+    setLoading(true)
+    fetchEventDetail(eventId)
+      .then(data => {
+        if (canceled) return
+        if (user.id !== data.host.id) {
+          showNotification('You’re not allowed to edit this event.', 'error')
+          navigate('/')
+          return
+        }
+        // Map server fields to form, formatting datetimes for datetime-local
+        setForm({
+          title: data.title || '',
+          description: data.description || '',
+          location: data.location || '',
+          city: data.city || '',
+          start_time: formatForDateTimeLocal(data.datetime),
+          rsvp_deadline: formatForDateTimeLocal(data.rsvp_deadline),
+          rsvp_limit: data.rsvp_limit != null ? String(data.rsvp_limit) : '',
+          category: data.category || 'other',
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          banner: null,
+          show_countdown: !!data.show_countdown,
+          external_url: data.external_url || '',
+          contact_email: data.contact_email || '',
+          contact_phone: data.contact_phone || '',
+          minimum_age_required: data.minimum_age != null,
+          minimum_age: data.minimum_age != null ? String(data.minimum_age) : '',
+        })
+        if (data.banner_url) {
+          setPreviewUrl(data.banner_url)
+        }
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error(err)
+        if (!canceled) {
+          setError('Failed to load event data.')
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [isEdit, eventId, user, navigate, showNotification])
+
+  // Handlers
+  const handleChange = e => {
     const { name, value, type, checked } = e.target
-    setForm((prev) => ({
+    setForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }))
   }
-
-  // Handle multi-select tags
-  const handleTagChange = (e) => {
-    const options = Array.from(e.target.selectedOptions).map((o) => o.value)
-    setForm((prev) => ({ ...prev, tags: options }))
+  const handleTagChange = e => {
+    const options = Array.from(e.target.selectedOptions).map(o => o.value)
+    setForm(prev => ({ ...prev, tags: options }))
   }
-
-  // Handle image file selection + preview URL
-  const handleBannerChange = (e) => {
+  const handleBannerChange = e => {
     const file = e.target.files[0]
     if (file) {
-      setForm((prev) => ({ ...prev, banner: file }))
+      setForm(prev => ({ ...prev, banner: file }))
       setPreviewUrl(URL.createObjectURL(file))
     }
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault()
     setError('')
     setSubmitting(true)
 
-    // Validate required fields
+    // Validate required
     if (
       !form.title ||
       !form.description ||
@@ -100,29 +195,31 @@ export default function CreateEvent() {
       !form.start_time ||
       !form.category
     ) {
-      setError('Please fill out all required fields (marked with *).')
+      setError('Please fill out all required fields.')
       setSubmitting(false)
       return
     }
 
-    // Convert user's local datetime to UTC before submission
-    const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const startUtc = toZonedTime(form.start_time, userTZ)
-    if (startUtc < new Date()) {
-      setError('Event must be scheduled in the future.')
-      setSubmitting(false)
-      return
-    }
-
+    // Convert start_time (local "YYYY-MM-DDTHH:mm") to UTC ISO
     try {
+      const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const localDate = parseISO(form.start_time) // this interprets as local if no offset
+      const utcDate = toZonedTime(localDate, userTZ) // get Date in local tz
+      // toZonedTime returns a Date in TZ; but we want to send UTC ISO:
+      const isoUtc = utcDate.toISOString()
+      // Check future
+      if (new Date(isoUtc) < new Date()) {
+        setError('Event must be scheduled in the future.')
+        setSubmitting(false)
+        return
+      }
       const fd = new FormData()
       fd.append('title', form.title)
       fd.append('description', form.description)
       fd.append('location', form.location)
-      // ensure city is lowercase for backend consistency
       fd.append('city', form.city.toLowerCase())
-      fd.append('datetime', startUtc.toISOString())
-      fd.append('rsvp_deadline', form.rsvp_deadline || '')
+      fd.append('datetime', isoUtc)
+      fd.append('rsvp_deadline', form.rsvp_deadline ? toZonedTime(parseISO(form.rsvp_deadline), userTZ).toISOString() : '')
       fd.append('rsvp_limit', form.rsvp_limit || '')
       fd.append('category', form.category)
       fd.append('tags', JSON.stringify(form.tags))
@@ -137,21 +234,35 @@ export default function CreateEvent() {
         fd.append('banner', form.banner)
       }
 
-      await createEvent(fd)
-      showNotification('🎉 Event created successfully!', 'success')
-      navigate('/events')
+      if (isEdit && eventId) {
+        await updateEvent(eventId, fd)
+        showNotification('✅ Event updated successfully!', 'success')
+        navigate(`/event/${eventId}`)
+      } else {
+        const res = await createEvent(fd)
+        const newId = res.data.id
+        showNotification('🎉 Event created successfully!', 'success')
+        navigate(`/event/${newId}`)
+      }
     } catch (err) {
-      console.error('Create Event Error:', err)
+      console.error('Submit Error:', err)
       setError('Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-gray-500 dark:text-gray-400">Loading event…</p>
+      </div>
+    )
+  }
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-900 shadow-md rounded-lg">
       <h1 className="text-3xl font-bold mb-6 text-center text-gray-900 dark:text-white">
-        Create an Event
+        {isEdit ? 'Edit Event' : 'Create an Event'}
       </h1>
 
       {error && (
@@ -189,7 +300,7 @@ export default function CreateEvent() {
           placeholder="123 Main St, Suite 100"
         />
 
-        {/* City dropdown powered by context `cities` */}
+        {/* City dropdown */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             City *
@@ -245,8 +356,8 @@ export default function CreateEvent() {
             className="w-full mt-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {TAG_OPTIONS.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
+              <option key={tag.value} value={tag.value}>
+                {tag.label}
               </option>
             ))}
           </select>
@@ -367,7 +478,13 @@ export default function CreateEvent() {
                 : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
             } transition`}
           >
-            {submitting ? 'Creating…' : 'Create Event'}
+            {submitting
+              ? isEdit
+                ? 'Saving Changes…'
+                : 'Creating…'
+              : isEdit
+              ? 'Save Changes'
+              : 'Create Event'}
           </button>
         </div>
       </form>
@@ -434,8 +551,8 @@ const Dropdown = ({ label, name, value, onChange, options }) => (
       className="w-full mt-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
     >
       {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt.charAt(0).toUpperCase() + opt.slice(1)}
+        <option key={opt.value ? opt.value : opt} value={opt.value ? opt.value : opt}>
+          {opt.label ? opt.label : opt}
         </option>
       ))}
     </select>

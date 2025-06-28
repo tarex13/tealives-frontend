@@ -57,7 +57,10 @@ export default function MediaPreviewCard({
   // 3) If there’s no valid preview, show a placeholder
   if (!displaySource) {
     return (
-      <div className="relative w-48 h-48 border rounded shadow flex items-center justify-center text-gray-500 dark:text-gray-300">
+      <div
+        className="relative w-48 border rounded shadow flex items-center justify-center text-gray-500 dark:text-gray-300"
+        style={{ aspectRatio: '16 / 9' }}
+      >
         No Preview Available
       </div>
     );
@@ -79,7 +82,10 @@ export default function MediaPreviewCard({
   };
 
   return (
-    <div className="relative w-48 h-48 border rounded shadow overflow-hidden bg-gray-100 dark:bg-gray-700">
+     <div
+      className="relative w-48 border rounded shadow overflow-hidden bg-gray-100 dark:bg-gray-700"
+      style={{ aspectRatio: '16 / 9' }}
+    >
       {/* Thumbnail */}
       <img
         src={displaySource}
@@ -92,10 +98,8 @@ export default function MediaPreviewCard({
         {/* Crop / Rotate */}
         <button
           type="button"
-          onClick={() => onEdit(fileObj)}
-          className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600"
-          title="Crop / Rotate"
-        >
+           onClick={() => onEdit(fileObj)}
+           >
           ✂️
         </button>
 
@@ -135,13 +139,13 @@ export default function MediaPreviewCard({
       )}
 
       {/* Caption input at the bottom */}
-      <input
+{/**      <input
         type="text"
         value={caption}
         onChange={(e) => onCaptionChange(fileObj.id, e.target.value)}
         placeholder="Add Caption (Optional)"
         className="absolute bottom-0 left-0 w-full p-1 border-t bg-white text-sm focus:outline-none"
-      />
+      />*/}
     </div>
   );
 }

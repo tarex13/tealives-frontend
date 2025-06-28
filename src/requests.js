@@ -236,11 +236,96 @@ export const updateListing = async (listingId, data, onProgress) => {
 export const fetchListingDetail = (listingId) =>
   api.get(`marketplace/${listingId}/`).then((res) => res.data);
 
+// ─── UPDATE an event ────────────────────────────────────────────────────────
+// PATCH /events/{eventId}/edit/
+export const updateEvent = (eventId, data, onProgress) =>
+  api.patch(`events/${eventId}/edit/`, data, {
+    onUploadProgress: onProgress,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+// ─── FETCH a single event’s detail (for pre-fill) ────────────────────────────
+// GET /events/{eventId}/
+export const fetchEventDetail = (eventId) =>
+  api.get(`events/${eventId}/`).then((res) => res.data)
+
+export const deleteEvent = (id) =>
+  api.delete(`events/${id}/edit/`);
+
+export const notInterestedEvent = (id) =>
+  api.post(`events/${id}/not_interested/`)
+
+// ─── EVENT PARTICIPANTS & HOST GROUPS ────────────────────────────────────────
+/**
+ * Fetch a page of RSVPs for a given event.
+ *
+ * @param {number|string} eventId
+ * @param {number} [page=1]
+ * @returns {Promise<{ results: Array, next: string|null }>}
+ */
+export function fetchEventRSVPs(eventId, page = 1) {
+  return api
+    .get(`events/${eventId}/rsvps/`, { params: { page } })
+    .then(res => ({
+      results: res.data.results,
+      next:    res.data.next,
+    }));
+}
+
+export const addEventParticipantsToGroup = (eventId, payload) =>
+  api.post(`events/${eventId}/rsvps/add-to-group/`, payload);
+
+export const fetchHostGroups = () =>
+  api.get('groups/own/').then(res => res.data);
+
+export const exportEventRSVPCSV = eventId =>
+  api.get(`events/${eventId}/rsvps/export/`, { responseType: 'blob' })
+     .then(res => {
+       const url = URL.createObjectURL(res.data);
+       const a = document.createElement('a');
+       a.href = url;
+       a.download = `event-${eventId}-rsvps.csv`;
+       a.click();
+       URL.revokeObjectURL(url);
+     });
+
+export function removeEventRSVP(eventId, userId) {
+  return api.post(
+    `events/${eventId}/rsvps/remove/`,
+    { user_id: userId }    // matches your RemoveRSVPSerializer
+  );
+}
+
+// fetch the host’s wait-list for an event
+
+export function fetchEventWaitlist(eventId, page = 1) {
+  return api
+    .get(`events/${eventId}/waitlist/`, { params: { page } })
+    .then(res => ({
+      results: res.data.results,
+      next:    res.data.next,   // assuming your DRF view is returning `next`
+    }));
+}
+
+// host removes someone from wait-list
+export function removeWaitlistMember(eventId, userId) {
+  return api
+    .post(`events/${eventId}/waitlist/remove/`, { user_id: userId })
+    .then(res => res.data);
+}
+
+
+export const notifyEventParticipants = (eventId, payload) =>
+  api.post(`events/${eventId}/rsvps/notify/`, payload);
+
 // ───────────────────────────────────────────────────────────────────────────────
 // 5) BADGES & LEADERBOARD (Item 3)
 // ───────────────────────────────────────────────────────────────────────────────
-export const fetchMyBadges = () =>
-  api.get('user/badges/');
+export const fetchSellerBadges = () =>
+  api.get('badges/fetch/?type=seller');
+
+export const fetchUserBadges = (user) =>
+  api.get(`badges/fetch/?user=${user}`);
 
 export const fetchLeaderboardListings = (params) =>
   api.get('marketplace/leaderboard/', { params });
@@ -403,8 +488,8 @@ export const demoteModerator = (groupId, userId) =>
 export const removeGroupMember = (groupId, userId) =>
   api.post(`/groups/${groupId}/members/${userId}/remove/`);
 
-export const getGroups = (params = {}) =>
-  api.get(`/groups/`, { params });
+{/*export const getGroups = (params = {}) =>
+  api.get(`/groups/`, { params });*/}
 export const joinGroup = (groupId) =>
   api.post(`/groups/${groupId}/join/`);
 export const leaveGroup = (groupId) =>
@@ -414,6 +499,10 @@ export const createGroupPost = (groupId, data) =>
   api.post(`/groups/${groupId}/posts/`, data);
 export const createGroupEvent = (groupId, data) =>
   api.post(`/groups/${groupId}/events/`, data);
+export const updateGroup = (groupId, data) => {
+  // assuming `api` is Axios instance with baseURL pointing to '/api/'
+  return api.patch(`groups/${groupId}/`, data);
+};
 export const createGroup = async (data) => {
   const response = await api.post('groups/', data);
   
@@ -503,7 +592,7 @@ export const voteToDeleteGroup = (groupId) =>
   api.post(`groups/${groupId}/vote-delete/`);
 
 export const inviteMembers = (groupId, userIds) =>
-  api.post(`/groups/${groupId}/invite/`, { user_ids: userIds });
+  api.post(`/groups/${groupId}/invite/`, { usernames: userIds });
 
 export const submitBid = (data) =>
   api.post('marketplace/bids/', data);
@@ -534,8 +623,8 @@ export const markItemSold = (itemId, buyerUsername = null) => {
  * Get or create a MarketplaceConversation for a given item:
  * POST /marketplace/{itemId}/get-or-create-conversation/ → { conversation_id: <id> }
  */
-export const getOrCreateConversation = (itemId) =>
-  api.post(`marketplace/${itemId}/get-or-create-conversation/`);
+//export const getOrCreateConversation = (itemId) =>
+ // api.post(`marketplace/${itemId}/get-or-create-conversation/`);
 
 /**
  * Fetch all messages for a given conversation (direct or item):
@@ -624,6 +713,12 @@ export const createRating = (data) =>
 
 export const fetchUserRatings = (userId, params) =>
   api.get(`ratings/user/${userId}/`, { params });
+
+export function createReview({ business, rating, comment }) {
+  return api.post('reviews/', { business, rating, comment });
+}
+
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 8) PRICE COMPETITIVENESS & BEST TIME TO POST (Item 8)

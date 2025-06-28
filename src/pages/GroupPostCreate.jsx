@@ -1,3 +1,4 @@
+{/**Currently not being used just using createpost but by passing a groupid  */}
 import React, { useState } from 'react';
 import { createPost, createPoll, fetchPostById } from '../requests';
 import MediaManager from '../components/MediaManager';

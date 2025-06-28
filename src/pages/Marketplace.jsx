@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCity } from '../context/CityContext';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, parseISO, isToday, isYesterday } from 'date-fns';
+import { Helmet } from 'react-helmet-async';
 
 const CATEGORY_OPTIONS = [
   { label: '📱 Electronics',   value: 'electronics'  },
@@ -179,6 +180,9 @@ export default function Marketplace() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+      <Helmet>
+        <title>MarketPlace | Tealives</title>
+      </Helmet>
       {/* ─── Header ─────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0">
         <h1 className="text-3xl font-bold">
@@ -199,7 +203,6 @@ export default function Marketplace() {
                   dark:border-none
                   px-5 py-2.5
                   rounded-lg
-                  hover:bg-indigo-50
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-300
                   transition-colors duration-200
                 "
@@ -217,7 +220,7 @@ export default function Marketplace() {
                   px-5 py-2.5
                   rounded-lg
                   bg-transparent
-                  hover:bg-green-50
+                  hover:bg-green-900
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300
                   transition-colors duration-200
                 "

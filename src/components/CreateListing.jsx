@@ -6,9 +6,11 @@ import {
   updateListing,
   fetchListingDetail,
 } from '../requests';
+import { useNotification } from '../context/NotificationContext';
 import MediaManager from '../components/MediaManager';
 import ImageEditorModal from '../components/ImageEditorModal';
 import { useCity } from '../context/CityContext';
+import { useAuth } from '../context/AuthContext'
 
 const CATEGORY_CHOICES = [
   { value: 'electronics', label: 'Electronics' },
@@ -48,8 +50,9 @@ const CONDITION_CHOICES = [
 ];
 
 export default function CreateListing({ isEdit = false }) {
-  const { CITIES } = useCity();
+  const { cities, city: City } = useCity();
   const { id: paramId } = useParams();
+  const { user } = useAuth()
   const listingId = paramId ? parseInt(paramId, 10) : null;
   const navigate = useNavigate();
 
@@ -58,7 +61,7 @@ export default function CreateListing({ isEdit = false }) {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('electronics');
-  const [city, setCity] = useState(CITIES.length > 0 ? CITIES[0] : '');
+  const [city, setCity] = useState(cities.length > 0 ? cities[0] : '');
   const [quantity, setQuantity] = useState(1);
   const [condition, setCondition] = useState('used');
   const [startingBid, setStartingBid] = useState('');
@@ -67,7 +70,8 @@ export default function CreateListing({ isEdit = false }) {
   const [deliveryOption, setDeliveryOption] = useState('pickup');
   const [deliveryNote, setDeliveryNote] = useState('');
   const [tags, setTags] = useState([]); // array of string codes
-
+  
+  const { showNotification }   = useNotification();
   // Media manager state
   const [mediaFiles, setMediaFiles] = useState([]);
   const [editingFile, setEditingFile] = useState(null);
@@ -75,7 +79,7 @@ export default function CreateListing({ isEdit = false }) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-
+  useEffect(() => setCity(City), []);
   // ─── Prefill on “edit” ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isEdit) return;
@@ -90,13 +94,13 @@ export default function CreateListing({ isEdit = false }) {
     fetchListingDetail(listingId)
       .then((data) => {
         if (canceled) return;
-
+        
         // Basic fields
         setTitle(data.title || '');
         setDescription(data.description || '');
         setPrice(data.price != null ? data.price.toString() : '');
         setCategory(data.category || 'electronics');
-        setCity(data.city || (CITIES.length > 0 ? CITIES[0] : ''));
+        setCity(data.city || (cities.length > 0 ? cities[0] : ''));
         setQuantity(data.quantity != null ? data.quantity : 1);
         setCondition(data.condition || 'used');
         setExpiryDate(data.expiry_date || '');
@@ -285,7 +289,7 @@ export default function CreateListing({ isEdit = false }) {
                   type="number"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  step="0.01"
+                  step="0.1"
                   min="0"
                   required
                   className="block w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
@@ -332,7 +336,7 @@ export default function CreateListing({ isEdit = false }) {
                 required
                 className="mt-1 block w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm py-2 px-3 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
               >
-                {CITIES.map((c) => (
+                {cities.map((c) => (
                   <option key={c} value={c}>
                     {c.charAt(0).toUpperCase() + c.slice(1)}
                   </option>

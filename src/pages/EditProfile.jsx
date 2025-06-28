@@ -9,6 +9,7 @@ import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { BUSINESS_TYPES } from '../../constants';
 import { useCity } from '../context/CityContext';
+import { fetchBusinessTypes } from '../requests';
 
 const USERNAME_CHANGE_LIMIT_DAYS = 30;
 const DAYS = [
@@ -30,7 +31,7 @@ export default function EditProfile() {
   const { user, setUser } = useAuth();
   const { showNotification } = useNotification();
   const { cities } = useCity();
-
+  const [businessTypes, setBusinessTypes] = useState([]);
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -130,6 +131,12 @@ export default function EditProfile() {
     })();
   }, []);
 
+    useEffect(() => {
+    fetchBusinessTypes()
+      .then(setBusinessTypes)
+      .catch(console.error);
+  }, []);
+
   const handleImageCropped = (blob, previewUrl) => {
     setForm((f) => ({ ...f, profile_image: blob }));
     setInitialAvatarUrl(previewUrl);
@@ -217,13 +224,11 @@ export default function EditProfile() {
         if (form.logo) fd.append('logo', form.logo);
       }
 
-      const res = await api.put('user/profile/', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
+      const res = await api.patch('user/profile/', fd);
       setUser(res.data);
       showNotification('Profile updated!', 'success');
-    } catch {
+    } catch(err) {
+      console.error('Network error saving profile:', err.response || err);
       setError('Failed to save profile.');
     } finally {
       setSubmitting(false);
@@ -276,7 +281,7 @@ export default function EditProfile() {
           </span>
         </label>
 
-        <label className="flex items-center space-x-2">
+{/*        <label className="flex items-center space-x-2">
           <input
             id="isPrivate"
             type="checkbox"
@@ -289,7 +294,7 @@ export default function EditProfile() {
           <span className="text-sm text-gray-700 dark:text-gray-300">
             Make Profile Private
           </span>
-        </label>
+        </label>*/}
       </div>
 
       {form.is_business && (
@@ -516,9 +521,9 @@ export default function EditProfile() {
                   className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Business Type</option>
-                  {BUSINESS_TYPES.map((bt) => (
+                  {businessTypes.map((bt) => (
                     <option key={bt} value={bt}>
-                      {bt}
+                      {bt.charAt(0).toUpperCase() + bt.slice(1)}
                     </option>
                   ))}
                 </select>
