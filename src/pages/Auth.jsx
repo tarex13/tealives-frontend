@@ -1,6 +1,6 @@
 // src/pages/Auth.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate }               from 'react-router-dom';
+import { useNavigate, useLocation }               from 'react-router-dom';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup                       from 'yup';
 import {
@@ -32,7 +32,9 @@ export default function Auth({ isOpen, setSidebarOpen }) {
   const [cities, setCities]             = useState([]);
   const [businessTypes, setBusinessTypes] = useState([]);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
-
+  const location = useLocation();
+  const [resetUid, setResetUid]     = useState(null);
+  const [resetToken, setResetToken] = useState(null);
   const { user, loginUser }             = useAuth();
   const { showNotification }            = useNotification();
   const navigate                        = useNavigate();
@@ -55,6 +57,37 @@ export default function Auth({ isOpen, setSidebarOpen }) {
       .then(setBusinessTypes)
       .catch(console.error);
   }, []);
+
+    // Detect URL query for reset flow: ?formType=reset&uid=XXX&token=YYY
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const mode   = params.get('formType');
+    const uid    = params.get('uid');
+    const token  = params.get('token');
+    if (mode === 'reset' && uid && token) {
+      setFormType('reset');
+      setResetUid(uid);
+      setResetToken(token);
+    }
+    if (mode === 'register') {
+      setFormType('register');
+    }
+  }, [location.search]);
+
+
+  // New: schema for password reset (enter new password)
+  const resetSchema = Yup.object({
+    newPassword: Yup.string()
+      .min(8, 'At least 8 chars')
+      .matches(/[A-Z]/, 'One uppercase letter')
+      .matches(/[a-z]/, 'One lowercase letter')
+      .matches(/[0-9]/, 'One number')
+      .matches(/[@$!%*?&]/, 'One special char')
+      .required('Required'),
+    confirmNewPassword: Yup.string()
+      .oneOf([Yup.ref('newPassword')], 'Passwords must match')
+      .required('Required'),
+  });
 
   // Yup validation schemas
   const loginSchema = Yup.object({
@@ -175,6 +208,8 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 ? loginSchema
                 : formType === 'register'
                 ? (step === 0 ? registerSchemaStep0 : registerSchemaStep1)
+                : formType === 'reset'
+                ? resetSchema
                 : forgotSchema
             }
             onSubmit={async (values, actions) => {
@@ -239,11 +274,40 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 } else if (formType === 'forgot') {
                   // FORGOT PASSWORD
                   // (you can replace this with a real API call)
-                  showNotification('Password reset link sent to your email.');
-                  setFormType('login');
-                  setStep(0);
-                  resetForm();
+                  // FORGOT PASSWORD → call backend to send email
+                  try {
+                    await api.post('auth/password-reset/', {
+                      email: values.email,
+                    });
+                    showNotification('Check your email for a reset link.', 'success');
+                    setFormType('login');
+                    setStep(0);
+                    resetForm();
+                  } catch (err) {
+                    // map error back to the email field if possible
+                    setFieldError('email', 'Unable to send reset link.');
+                    showNotification('Failed to send reset link.', 'error');
+                  }
+ 
+                } else if (formType === 'reset') {
+                  // RESET CONFIRM: call backend with uid, token & new password
+                  try {
+                    await api.post('auth/password-reset-confirm/', {
+                      uid:          resetUid,
+                      token:        resetToken,
+                      new_password: values.newPassword
+                    });
+                    showNotification('Password updated! Please log in.', 'success');
+                    // clear out reset state
+                    setFormType('login');
+                    setResetUid(null);
+                    setResetToken(null);
+                    resetForm();
+                  } catch (err) {
+                    setFieldError('newPassword', 'Invalid or expired link.');
+                  }
                 }
+                
               } catch (err) {
                 // map server errors to fields
                 if (err.response?.data) {
@@ -408,6 +472,8 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                 )}
 
                 {/* FORGOT */}
+               
+
                 {formType === 'forgot' && (
                   <>
                     <Field
@@ -417,6 +483,26 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                       className="input-style"
                     />
                     <ErrorMessage name="email" component="div" className="text-red-600 text-sm"/>
+                  </>
+                )}
+
+                {/* RESET */} 
+                {formType === 'reset' && (
+                  <>
+                    <Field
+                      name="newPassword"
+                      type="password"
+                      placeholder="New Password"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="newPassword" component="div" className="text-red-600 text-sm"/>
+                    <Field
+                      name="confirmNewPassword"
+                      type="password"
+                      placeholder="Confirm New Password"
+                      className="input-style"
+                    />
+                    <ErrorMessage name="confirmNewPassword" component="div" className="text-red-600 text-sm"/>
                   </>
                 )}
 
@@ -436,11 +522,12 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                     disabled={formik.isSubmitting}
                     className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 rounded transition"
                   >
-                    {formType === 'login'
-                      ? 'Log In'
-                      : formType === 'register'
-                      ? step === 0 ? 'Next' : 'Sign Up'
-                      : 'Send Reset Link'}
+                       {{
+                          login:    'Log In',
+                          register: step === 0 ? 'Next' : 'Sign Up',
+                          forgot:   'Send Reset Link',
+                          reset:    'Set New Password'
+                        }[formType]}
                   </button>
                 </div>
 

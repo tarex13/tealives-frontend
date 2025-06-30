@@ -238,7 +238,7 @@ const [markSoldOpen, setMarkSoldOpen] = useState(false);
               //const res = await getOrCreateConversation(item.id);
               //console.log(res)
               //const convoId = res.data.conversation_id;
-              navigate(`/inbox?item=${item.id}&to=${item.seller.id}`);
+              navigate(`/inbox?item=${item.id}&to=${item.seller.public_id}`);
             } catch {
               alert('Could not open chat.');
             }

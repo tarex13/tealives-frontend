@@ -321,14 +321,12 @@ const messagesRef = useRef(null);
       setLoadingThreads(true);
 
       async function init() {
-        console.log(1);
         const page = await loadThreadsPage();
         if (cancelled) return;
 
         // Priority 1: new marketplace message
         if (autoOpenUserId &&  autoItemId) {
           
-          console.log(2);
           try {
             let [user, item] = await Promise.all([
               fetchPublicProfile(autoOpenUserId),
@@ -366,10 +364,9 @@ const messagesRef = useRef(null);
         // Priority 2: new direct message
         if (autoOpenUserId && ! autoItemId) {
           
-        console.log(3);
           let t = page.results.find(
             t => t.type === 'direct' &&
-            String(t.user.id) === String(autoOpenUserId)
+            String(t.user.public_id) === String(autoOpenUserId)
           );
           if (!t) {
             const u = await fetchPublicProfile(autoOpenUserId);
@@ -1042,7 +1039,7 @@ function formatFileSize(bytes) {
               ) : (
                 <ul className="px-2 space-y-1">
                   {filteredThreads.map((t) => {
-                    
+                    console.log(t, "price")
                     let displayName, subtitle;
                     if (t.type === 'direct') {
                       displayName = t.user.username;
@@ -1050,7 +1047,8 @@ function formatFileSize(bytes) {
                     } else if (t.type === 'marketplace') {
                       displayName = `${t.item_title} with ${t.other_user.username}`;
                       subtitle = [
-                        `$${t.item_price.toFixed(2)}`,
+                        t.item_price != null && !isNaN(parseFloat(t.item_price))
+                          ? `$${parseFloat(t.item_price).toFixed(2)}` : '',
                         t.last_message || 'No messages yet'
                       ].join(' • ');
                     } else {
@@ -1359,7 +1357,7 @@ function formatFileSize(bytes) {
           }
           // for message bubbles, you can extract your existing JSX
           const m = item.data;
-          const isOwner = Number(m.sender_id) === Number(currentUser.id);
+          const isOwner = m.sender_id === currentUser.id;
           const isSystem = m.message_type === 'system';
           
             // Message bubble
@@ -1910,7 +1908,7 @@ function formatFileSize(bytes) {
    }
    setActiveThread(existing);
    setShowContacts(false);
-   navigate(`/inbox?to=${user.id}`);
+   navigate(`/inbox?to=${user.p_id}`);
  }}
       />
 

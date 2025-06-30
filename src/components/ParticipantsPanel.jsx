@@ -1,3 +1,4 @@
+{/**Not being used */}
 import React, { useState, useMemo } from 'react';
 import { FaDownload, FaEnvelope, FaTrash } from 'react-icons/fa';
 
@@ -106,7 +107,7 @@ export default function ParticipantsPanel({
                       <div className="h-8 w-8 rounded-full bg-gray-300 dark:bg-gray-600" />
                     )}
                     <a
-                      href={`/profile/${u.id}`}
+                      href={`/profile/${u.username}`}
                       className="font-medium text-gray-900 dark:text-gray-100 hover:underline transition"
                     >
                       {u.username}

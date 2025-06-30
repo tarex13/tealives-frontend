@@ -70,7 +70,7 @@ export default function MarketplaceItemDetail() {
     try {
       //const res = await getOrCreateConversation(item.id);
       //const convoId = res.data.conversation_id;
-      navigate(`/inbox?item=${item.id}&to=${item.seller.id}`);
+      navigate(`/inbox?item=${item.id}&to=${item.seller.public_id}`);
     } catch (err) {
       console.error('Conversation error:', err);
       alert('Could not open chat with seller.');
@@ -115,8 +115,8 @@ export default function MarketplaceItemDetail() {
           <img
               src={
                 isSaved
-                  ? '22.svg'
-                  : '21.svg'
+                  ? '/public/22.svg'
+                  : '/public/21.svg'
               }
               alt={isSaved ? 'Unsave' : 'Save'}
               className="w-6 h-6 -rotate-9"

@@ -564,6 +564,7 @@ export default function CreateListing({ isEdit = false }) {
               mediaFiles={mediaFiles}
               setMediaFiles={setMediaFiles}
               openEditor={setEditingFile}
+              vid={true}
             />
             {isEdit && mediaFiles.length === 0 && (
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">

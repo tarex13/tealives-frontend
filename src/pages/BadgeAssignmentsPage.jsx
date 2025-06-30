@@ -244,8 +244,8 @@ export default function BadgeAssignmentsPage() {
       source.droppableId === 'badges' &&
       destination?.droppableId?.startsWith('user-')
     ) {
-      const bid = Number(draggableId.replace('badge-', ''));
-      const uid = Number(destination.droppableId.replace('user-', ''));
+      const bid = draggableId.replace('badge-', '');
+      const uid = destination.droppableId.replace('user-', '');
       handleAssign(uid, bid);
     }
   };

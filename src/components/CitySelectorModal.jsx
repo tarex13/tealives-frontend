@@ -49,7 +49,7 @@ export default function CitySelectorModal() {
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
       <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-xl w-11/12 max-w-sm animate-fade-in-up">
         <h2 className="text-xl font-bold text-center mb-4 text-gray-800 dark:text-gray-200">
-          🌆 Choose Your Community
+          🏘️ Choose Your Community
         </h2>
 
         {/* City dropdown: options come from React-managed `cities` */}

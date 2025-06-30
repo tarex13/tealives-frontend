@@ -104,7 +104,7 @@ export default function ListingActionMenu({
       // { conversation_id, item_id, item_title, item_price, item_status, item_thumbnail }
       //const convoId = res.data.conversation_id;
       // Navigate into Inbox, passing both “conversation” and “to” (seller’s id).
-      navigate(`/inbox?item=${id}&to=${seller?.id}`);
+      navigate(`/inbox?item=${id}&to=${seller?.public_id}`);
     } catch {
       alert('Could not open chat.');
     }

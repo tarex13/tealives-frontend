@@ -73,6 +73,7 @@ import MyRatings from './pages/MyRatings';
 import PriceCompetitiveness from './components/PriceCompetitiveness';
 import PrivacyPolicyPage from './pages/PrivacyPolicy';
 import BestTimeToPost from './components/BestTimeToPost';
+import ApplyModerator from './pages/ApplyModerator';
 import ModBadgeAssignmentsPage from './pages/ModBadgeAssignmentsPage';
 {/*import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Analytics } from "@vercel/analytics/next"*/}
@@ -170,6 +171,7 @@ function App() {
                 <Route path="/user/auth" element={<Login  isOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}/>} />
                 <Route path="/auth" element={<Login  isOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}/>} />
                 <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/mod/apply" element={<ApplyModerator />} />
                 <Route path="/events" element={<EventsPage />} />
                 <Route path="/event/:id" element={<Event />} />
                 <Route path="/event/:id/edit" element={<CreateEvent isEdit={true} />} />

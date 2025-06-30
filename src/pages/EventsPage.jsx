@@ -442,7 +442,7 @@ export default function EventsPage() {
                 {/* Contact Host */}
                 {user && evt.host.id !== user.id && (
                   <button
-                    onClick={() => navigate(`/inbox?to=${evt.host.id}`)}
+                    onClick={() => navigate(`/inbox?to=${evt.host.public_id}`)}
                     className="
                       mt-2 w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg font-semibold
                       text-blue-600 border-2 border-blue-600 hover:bg-blue-600 hover:text-white transition

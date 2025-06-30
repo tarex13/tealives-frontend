@@ -426,7 +426,7 @@ Gray-600 dark:text-gray-400">
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => navigate(`/inbox?to=${u.id}`)}
+                        <button onClick={() => navigate(`/inbox?to=${u.p_id}`)}
                                 className="px-3 py-1 text-sm rounded-lg border border-teal-600
                                            text-teal-600  cursor-pointer hover:bg-teal-600 hover:text-white transition">
                           Message

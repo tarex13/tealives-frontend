@@ -921,7 +921,7 @@ export default function Inbox({ setSidebarMinimized }) {
                         </div>
                         {msgs.map((m) => {
                           const isOwner =
-                            Number(m.sender_id) === Number(currentUser.id);
+                            m.sender_id === currentUser.id;
                           const isEditing = editingMessageId === m.id;
                           const isDeleted = m.is_deleted;
                           const isModerator = m.isModerator;

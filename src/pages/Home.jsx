@@ -194,7 +194,7 @@ export default function Home() {
   return (
     <>
       <Helmet>
-        <title>Feed | Tealives</title>
+        <title>Tealives – Your City, Your Community</title>
       </Helmet>
       {/* Desktop CreatePost */}
       {user && (

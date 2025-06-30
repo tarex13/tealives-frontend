@@ -45,7 +45,7 @@ export default function MyRatings() {
   return (
     <div className="max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-4">Ratings for User #{userId}</h2>
-      {user && parseInt(userId, 10) !== user.id && (
+      {user && userId, 10 !== user.id && (
         <button
           onClick={() => setShowForm((v) => !v)}
           className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition mb-4"

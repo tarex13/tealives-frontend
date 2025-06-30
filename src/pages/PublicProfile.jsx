@@ -240,6 +240,11 @@ export default function Profile() {
   // ─── 5) Follow / Unfollow ───────────────────────────────────────────────────────
   const handleFollow = async () => {
     if (!info?.id) return;
+    if(!currentUser){
+      navigate('/auth')
+      showNotification('User Not Logged In!!!', 'error')
+      return
+    }
     try {
       const res = await toggleFollow(info.id);
       setInfo((i) => ({ ...i, is_following: res.status === 'followed' }));
@@ -252,6 +257,11 @@ export default function Profile() {
   // ─── 6) Message user ───────────────────────────────────────────────────────────
   const handleMessage = () => {
     if (!info?.id) return;
+    if(!currentUser){
+      navigate('/auth')
+      showNotification('User Not Logged In!!!', 'error')
+      return;
+    }
     navigate(`/inbox?to=${info.username}`);
   };
 
