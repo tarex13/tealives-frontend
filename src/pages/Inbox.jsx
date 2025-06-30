@@ -314,100 +314,107 @@ const messagesRef = useRef(null);
         catch { return false; }
       });
   }
+ // 1️⃣ Fetch threads initially (and auto-open if needed)
+useEffect(() => {
+  let cancelled = false;
+  setLoadingThreads(true);
 
-// 1️⃣ Fetch threads initially (and auto-open if needed)
-    useEffect(() => {
-      let cancelled = false;
-      setLoadingThreads(true);
+  async function init() {
+    const page = await loadThreadsPage();
+    if (cancelled) return;
 
-      async function init() {
-        const page = await loadThreadsPage();
-        if (cancelled) return;
-
-        // Priority 1: new marketplace message
-        if (autoOpenUserId &&  autoItemId) {
-          
-          try {
-            let [user, item] = await Promise.all([
-              fetchPublicProfile(autoOpenUserId),
-              fetchMarketplaceItemDetail( autoItemId),
-            ]);
-           item = item.data || item
-
-            const thread = {
-              type: 'marketplace',
-              item_id: item.id,
-              item_title: item.title,
-              item_status: item.status,
-              item_bidding: item.is_bidding,
-              item_thumbnail: item.thumbnail,
-              item_price: item.price,
-              starting_bid: item.starting_bid,
-              highest_bid: item.highest_bid,
-              buyer: { id: user.id }, // temporary
-              seller: item.seller,
-              other_user: user,
-              last_message: '',
-              last_message_time: new Date().toISOString(),
-              unread_count: 0,
-              is_virtual: true
-            };
-            setActiveThread(thread);
-            setShowContacts(false);
-            console.log(thread);
-            return;
-          } catch (err) {
-            console.error("Error loading user/item:", err);
-          }
-        }
-
-        // Priority 2: new direct message
-        if (autoOpenUserId && ! autoItemId) {
-          
-          let t = page.results.find(
-            t => t.type === 'direct' &&
-            String(t.user.public_id) === String(autoOpenUserId)
-          );
-          if (!t) {
-            const u = await fetchPublicProfile(autoOpenUserId);
-            t = {
-              type: autoItemId ? 'marketplace' : 'direct',
-              user: u,
-              last_message: '',
-              last_message_time: new Date().toISOString(),
-              unread_count: 0,
-            };
-
-            if (autoItemId) {
-              const itemDetail = await fetchMarketplaceItemDetail(autoItemId);
-              t.item_id = itemDetail.id;
-              t.item_title = itemDetail.title;
-              t.item_price = itemDetail.price;
-              t.item_status = itemDetail.status;
-              t.item_thumbnail = itemDetail.thumbnail || null;
-              t.buyer = u;
-              t.seller = itemDetail.seller;
-              console.log(t);
-            }
-
-            setThreadsPage((prev) => ({
-              ...prev,
-              results: [t, ...(prev?.results || [])]
-            }));
-          }
-          setActiveThread(t);
-          setShowContacts(false);
-
-          return;
-        }
+    // Priority 1: marketplace thread if both `to` and `item` params are present
+    if (autoOpenUserId && autoItemId) {
+      console.log({ autoOpenUserId, autoItemId, threads: page.results });
+      const existingMp = page.results.find(t =>
+        t.type === 'marketplace' &&
+        String(t.other_user.public_id) === String(autoOpenUserId) &&
+        (
+          String(t.item_id) === String(autoItemId) ||
+          String(t.item?.id) === String(autoItemId) ||
+          String(t.conversation_id) === String(autoItemId)
+        )
+      );
+      if (existingMp) {
+        setActiveThread(existingMp);
+        setShowContacts(false);
+        return;
       }
 
-      init()
-        .catch(console.error)
-        .finally(() => { if (!cancelled) setLoadingThreads(false); });
+      // No existing → create a “virtual” marketplace thread in UI only
+      try {
+        const [user, itemResp] = await Promise.all([
+          fetchPublicProfile(autoOpenUserId),
+          fetchMarketplaceItemDetail(autoItemId),
+        ]);
+        const item = itemResp.data || itemResp;
 
-      return () => { cancelled = true; };
-    }, [autoOpenUserId,  autoItemId, setSidebarMinimized]);
+        setActiveThread({
+          type: 'marketplace',
+          conversation_id: undefined,  // we’ll get it once they actually send
+          item_id:          item.id,
+          item_title:       item.title,
+          item_status:      item.status,
+          item_bidding:     item.is_bidding,
+          item_thumbnail:   item.thumbnail,
+          item_price:       item.price,
+          starting_bid:     item.starting_bid,
+          highest_bid:      item.highest_bid,
+          buyer:            { id: user.id },
+          seller:           item.seller,
+          other_user:       user,
+          last_message:     '',
+          last_message_time:new Date().toISOString(),
+          unread_count:     0,
+          is_virtual:       true,
+        });
+        setShowContacts(false);
+
+        // → **Removed** the empty‐message POST here. 
+        //    We’ll only create the conversation when the user actually sends.
+
+      } catch (err) {
+        console.error('Error initializing marketplace thread:', err);
+      }
+      return;
+    }
+
+    // Priority 2: direct message if only `to` param is present
+    if (autoOpenUserId && !autoItemId) {
+      let t = page.results.find(
+        t => t.type === 'direct' &&
+             String(t.user.public_id) === String(autoOpenUserId)
+      );
+      if (!t) {
+        const u = await fetchPublicProfile(autoOpenUserId);
+        t = {
+          type: 'direct',
+          user: u,
+          last_message: '',
+          last_message_time: new Date().toISOString(),
+          unread_count: 0,
+        };
+        setThreadsPage(prev => ({
+          ...prev,
+          results: [t, ...(prev.results || [])],
+        }));
+      }
+      setActiveThread(t);
+      setShowContacts(false);
+      return;
+    }
+  }
+
+  init()
+    .catch(console.error)
+    .finally(() => {
+      if (!cancelled) setLoadingThreads(false);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [autoOpenUserId, autoItemId, setSidebarMinimized]);
 
       // ── 1️⃣ Auto‐scroll to bottom on thread switch ───────────────────────
       useEffect(() => {
@@ -661,12 +668,15 @@ useEffect(() => {
 
       const formData = new FormData();
       formData.append(
-        'recipient',
+        'recipient_id',
         activeThread.type === 'direct'
           ? activeThread.user.id
           : activeThread.other_user.id
       );
       formData.append('conversation', activeThread.conversation_id || '');
+      if (activeThread.type === 'marketplace' && autoItemId) {
+        formData.append('item', autoItemId);
+      }
       formData.append('content', content);
       formData.append('attachment_file', attachmentFile);
 
@@ -761,13 +771,17 @@ useEffect(() => {
 
         try {
           const response = await api.post('/messages/', {
-            recipient:
+            recipient_id:
               activeThread.type === 'direct'
                 ? activeThread.user.id
                 : activeThread.other_user.id,
-            conversation: activeThread.conversation_id || '',
             content,
+             item: activeThread.type === 'marketplace' ? autoItemId : undefined,
             message_type: 'user',
+            conversation:
+              activeThread.type === 'marketplace'
+                ? activeThread.conversation_id
+                : undefined,
           });
 
           const newMsg = response.data;
