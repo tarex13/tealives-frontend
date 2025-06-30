@@ -653,122 +653,162 @@ useEffect(() => {
   // ─────────────────────────────────────────────────────────────────────────────
   // 5️⃣ Send a message or upload an attachment :contentReference[oaicite:4]{index=4}
 // ── Updated handleSendOrUpload ────────────────────────────────────────────
-const handleSendOrUpload = async () => {
-  // 1) Attachment path: show spinner
-  if (attachmentFile) {
-    setIsUploading(true);
-    const previewUrl = URL.createObjectURL(attachmentFile);
-    // build form
-    const formData = new FormData();
-    formData.append(
-      'recipient',
-      activeThread.type === 'direct'
-        ? activeThread.user.id
-        : activeThread.other_user.id
-    );
-    formData.append('conversation', activeThread.conversation_id || '');
-    formData.append('content', content);
-    formData.append('attachment_file', attachmentFile);
+  const handleSendOrUpload = async () => {
+    // 1️⃣ Handle file attachments
+    if (attachmentFile) {
+      setIsUploading(true);
+      const previewUrl = URL.createObjectURL(attachmentFile);
 
-    try {
-      const resp = await api.post(
-        '/messages/upload/',
-        formData,
-        {
+      const formData = new FormData();
+      formData.append(
+        'recipient',
+        activeThread.type === 'direct'
+          ? activeThread.user.id
+          : activeThread.other_user.id
+      );
+      formData.append('conversation', activeThread.conversation_id || '');
+      formData.append('content', content);
+      formData.append('attachment_file', attachmentFile);
+
+      try {
+        const resp = await api.post('/messages/upload/', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
             Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
           },
+        });
+        const newMsg = resp.data;
+
+        setMessages(prev => [
+          ...prev,
+          {
+            id: newMsg.id,
+            content: newMsg.content,
+            message_type: newMsg.message_type,
+            sender_id: newMsg.sender_id,
+            recipient_id: newMsg.recipient_id,
+            is_read: newMsg.is_read,
+            attachment_url: newMsg.attachment_url,
+            edited_at: newMsg.edited_at,
+            is_deleted: newMsg.is_deleted,
+            sent_at: newMsg.sent_at,
+            is_own: true,
+            isModerator: newMsg.is_moderator_message,
+            reactions_summary: [],
+            user_reactions: [],
+            subject: newMsg.subject,
+          },
+        ]);
+      } catch (err) {
+        console.error('Upload failed', err);
+        alert('Failed to send attachment.');
+      } finally {
+        URL.revokeObjectURL(previewUrl);
+        setIsUploading(false);
+        setContent('');
+        setAttachmentFile(null);
+        setUserHasInteracted(false);
+      }
+    }
+
+    // 2️⃣ Handle text-only messages
+    else if (content.trim()) {
+      const tempMsg = {
+        id: `temp-${Date.now()}`,
+        content,
+        message_type: 'user',
+        sender_id: currentUser.id,
+        recipient_id:
+          activeThread.type === 'direct'
+            ? activeThread.user.id
+            : activeThread.other_user.id,
+        is_read: true,
+        attachment_url: null,
+        edited_at: null,
+        is_deleted: false,
+        sent_at: new Date().toISOString(),
+        is_own: true,
+        isModerator: false,
+        subject: '',
+      };
+
+      // 2a. Optimistically add message
+      setMessages(prev => [...prev, tempMsg]);
+
+      // 2b. Try WebSocket first
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            command: 'new_message',
+            toUserId:
+              activeThread.type === 'direct'
+                ? activeThread.user.id
+                : activeThread.other_user.id,
+            content,
+            item: autoItemId,
+            conversationId:
+              activeThread.type === 'marketplace'
+                ? activeThread.conversation_id
+                : undefined,
+            message_type: 'user',
+          })
+        );
+      }
+
+      // 2c. Fallback to REST if WebSocket not open
+      else {
+        console.warn('WebSocket not open, using fallback REST endpoint');
+
+        try {
+          const response = await api.post('/messages/', {
+            recipient:
+              activeThread.type === 'direct'
+                ? activeThread.user.id
+                : activeThread.other_user.id,
+            conversation: activeThread.conversation_id || '',
+            content,
+            message_type: 'user',
+          });
+
+          const newMsg = response.data;
+
+          setMessages(prev => [
+            ...prev.slice(0, -1), // remove temp
+            {
+              id: newMsg.id,
+              content: newMsg.content,
+              message_type: newMsg.message_type,
+              sender_id: newMsg.sender_id,
+              recipient_id: newMsg.recipient_id,
+              is_read: newMsg.is_read,
+              attachment_url: newMsg.attachment_url,
+              edited_at: newMsg.edited_at,
+              is_deleted: newMsg.is_deleted,
+              sent_at: newMsg.sent_at,
+              is_own: true,
+              isModerator: newMsg.is_moderator_message,
+              reactions_summary: [],
+              user_reactions: [],
+              subject: newMsg.subject,
+            },
+          ]);
+        } catch (err) {
+          console.error('Fallback REST message failed', err);
+          showNotification('Failed to send message. Try again.', 'error');
         }
-      );
-      const newMsg = resp.data;
-      // append the fully‐populated message returned by your REST endpoint
-      setMessages(prev => [
-        ...prev,
-        {
-          id:                 newMsg.id,
-          content:            newMsg.content,
-          message_type:       newMsg.message_type,
-          sender_id:          newMsg.sender_id,
-          recipient_id:       newMsg.recipient_id,
-          is_read:            newMsg.is_read,
-          attachment_url:     newMsg.attachment_url,
-          edited_at:          newMsg.edited_at,
-          is_deleted:         newMsg.is_deleted,
-          sent_at:            newMsg.sent_at,
-          is_own:             true,
-          isModerator:        newMsg.is_moderator_message,
-          reactions_summary:  [],
-          user_reactions:     [],
-          subject:            newMsg.subject,
-        },
-      ]);
-    } catch (err) {
-      console.error('Upload failed', err);
-      alert('Failed to send attachment.');
-    } finally {
-      // always clean up spinner & preview state
-      URL.revokeObjectURL(previewUrl);
-      setIsUploading(false);
+      }
+
+      // 2d. Clear composer
       setContent('');
-      setAttachmentFile(null);
       setUserHasInteracted(false);
     }
-  }
-  // 2) Text‐only path: WebSocket
-  else if (content.trim()) {
-    // Optimistically render a temp message
-    const tempMsg = {
-      id:            `temp-${Date.now()}`,
-      content,
-      message_type:  'user',
-      sender_id:     currentUser.id,
-      recipient_id:
-        activeThread.type === 'direct'
-          ? activeThread.user.id
-          : activeThread.other_user.id,
-      is_read:       true,
-      attachment_url: null,
-      edited_at:     null,
-      is_deleted:    false,
-      sent_at:       new Date().toISOString(),
-      is_own:        true,
-      isModerator:   false,
-      subject:       '',
-    };
-    setMessages(prev => [...prev, tempMsg]);
 
-    // send over WS if ready
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          command: 'new_message',
-          toUserId:
-            activeThread.type === 'direct'
-              ? activeThread.user.id
-              : activeThread.other_user.id,
-          content,
-          item: autoItemId,
-          conversationId:
-            activeThread.type === 'marketplace'
-              ? activeThread.conversation_id
-              : undefined,
-          message_type: 'user',
-        })
-      );
-    } else {
-      console.warn(
-        'Attempted to send before WS was open – message still queued locally.'
-      );
+    // 3️⃣ Clear draft if no attachment
+    if (!attachmentFile) {
+      localStorage.removeItem(`draft_${getThreadKey(activeThread)}`);
     }
-    // clear the composer
-    setContent('');
-    setUserHasInteracted(false);
-  }
-  if (!attachmentFile) {
-    localStorage.removeItem(`draft_${getThreadKey(activeThread)}`);
-  }
-};
+  };
+
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 6️⃣ Typing indicator (only after actual user input) :contentReference[oaicite:5]{index=5}

@@ -222,7 +222,8 @@ export const AuthProvider = ({ children }) => {
 
   // ─── Login: POST credentials → get {access, refresh} → fetch profile ───────────
   const loginUser = async ({ username, password }, redirectTo = '/') => {
-    console.log('[AuthContext] loginUser() called');
+    
+    return;
     try {
       const response = await api.post('token-login/', { username, password });
       const { access } = response.data;
