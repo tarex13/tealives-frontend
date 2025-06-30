@@ -75,8 +75,8 @@ import PrivacyPolicyPage from './pages/PrivacyPolicy';
 import BestTimeToPost from './components/BestTimeToPost';
 import ApplyModerator from './pages/ApplyModerator';
 import ModBadgeAssignmentsPage from './pages/ModBadgeAssignmentsPage';
-{/*import { SpeedInsights } from "@vercel/speed-insights/react"
-import { Analytics } from "@vercel/analytics/next"*/}
+import { SpeedInsights } from "@vercel/speed-insights/react"
+import { Analytics } from "@vercel/analytics/next"
 function App() {
   const { user, loading } = useAuth();
   // App‐wide loading state to show our <Loader />
