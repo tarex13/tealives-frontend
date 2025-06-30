@@ -9,6 +9,7 @@ import PollCardEnhanced from './PollCardEnhanced';
 import CommentSection from '../pages/CommentSection';
 import { MessageCircle, Pin } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import Linkify from 'linkify-react';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '🔥'];
 const TYPE_STYLES = {
@@ -104,6 +105,27 @@ export default function FeedCard({ post, refetchPostData }) {
       setLoadingEmoji(null);
     }
   };
+
+  const linkifyOptions = {
+  // wrap every link in an <a> with your onClick + styling
+  render: {
+    a: ({ attrs, children, key }) => (
+      <a
+        {...attrs}
+        key={key}
+        onClick={e => {
+          e.preventDefault()
+          alert(`You’re leaving Tealives and going to:\n\n${attrs.href}`)
+          window.open(attrs.href, '_blank', 'noopener,noreferrer')
+        }}
+        className="!text-blue-600 dark:!text-blue-400 hover:underline break-all"
+      >
+        {children}
+      </a>
+    )
+  }
+}
+
 
   // ── RENDER ──
   return (
@@ -209,9 +231,20 @@ export default function FeedCard({ post, refetchPostData }) {
 
       {/* ────── Content ────── */}
       <div className="px-4 sm:px-6 pb-4">
-        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-          {post.content}
-        </p>
+    <p
+    className="
+      text-gray-700 dark:text-gray-300
+      whitespace-pre-wrap break-words
+
+      /* make every direct child <a> blue */
+      [&_a]:text-blue-600
+      [&_a]:dark:text-blue-400
+      [&_a]:hover:underline
+      [&_a]:break-all
+    "
+  >
+    <Linkify options={linkifyOptions}>{post.content}</Linkify>
+  </p>
       </div>
 
       {/* ────── Media ────── */}

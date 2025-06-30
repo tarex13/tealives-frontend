@@ -227,7 +227,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                     setSidebarOpen(true);
                     navigate('/');
                   } else {
-                    setFieldError('password', 'Invalid credentials');
+                    setFieldError('password', 'Login Limited to July  1st');{/**Change Here */}
                   }
 
                 } else if (formType === 'register') {
