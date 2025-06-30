@@ -17,7 +17,7 @@ apiClient.interceptors.request.use(
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
-         config.headers['X-Requested-With'] = 'XMLHttpRequest';
+         config.headers['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
         return config;
     },
     (error) => Promise.reject(error)
