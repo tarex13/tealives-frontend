@@ -227,7 +227,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                     setSidebarOpen(true);
                     navigate('/');
                   } else {
-                    setFieldError('password', 'Login Not Allowed(check github.com/tarex13 for test password)');{/**Change Here */}
+                    setFieldError('password', 'Login Not Allowed (check github.com/tarex13 for test login)');{/**Change Here */}
                   }
 
                 } else if (formType === 'register') {
