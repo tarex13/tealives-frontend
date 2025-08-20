@@ -227,7 +227,7 @@ export default function Auth({ isOpen, setSidebarOpen }) {
                     setSidebarOpen(true);
                     navigate('/');
                   } else {
-                    setFieldError('password', 'Login Limited till July  1st');{/**Change Here */}
+                    setFieldError('password', 'Login Not Allowed(check github.com/tarex13 for test password)');{/**Change Here */}
                   }
 
                 } else if (formType === 'register') {

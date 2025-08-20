@@ -223,7 +223,7 @@ export const AuthProvider = ({ children }) => {
   // ─── Login: POST credentials → get {access, refresh} → fetch profile ───────────
   const loginUser = async ({ username, password }, redirectTo = '/') => {
     
-    return;{/**Change Here */}
+    if(username != "testuser" || username != 'tealives') return;{/**Change Here */}
     try {
       const response = await api.post('token-login/', { username, password });
       const { access } = response.data;
