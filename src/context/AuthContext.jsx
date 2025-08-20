@@ -224,7 +224,9 @@ export const AuthProvider = ({ children }) => {
   const loginUser = async ({ username, password }, redirectTo = '/') => {
     
     const allowed = ["testuser", "tealives"];
-    if (!allowed.includes(username)) return;
+    const normalized = (username || '').trim().toLowerCase();
+    console.log(normalized)
+    if (!allowed.includes(normalized)) return;
     {/**Change Here */}
 
     try {
