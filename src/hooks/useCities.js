@@ -32,60 +32,101 @@ function loadStoredCities() {
  * - then runs IP lookup *only* to push the user’s city to the front
  *   if—and only if—it exists in that fetched list
  */
+// Works good but shows nothing while server boots up
+// export function useCities() {
+//   const [cities, setCities] = useState(loadStoredCities)
+
+//   useEffect(() => {
+//     let fetchedList = null
+
+//     // 1) Fetch the canonical city list
+//     api.get('cities/')
+//       .then((res) => {
+//         const list = res.data
+//         if (Array.isArray(list) && list.length > 0) {
+//           // normalize to lowercase
+//           fetchedList = list.map((c) => c.toLowerCase())
+//           // sort alphabetically
+//           fetchedList.sort((a, b) =>
+//             a.localeCompare(b, undefined, { sensitivity: 'base' })
+//           )
+//           // update state → re-render dropdown
+//           setCities(fetchedList)
+//           // cache for next hard reload
+//           try {
+//             localStorage.setItem(CITY_LIST_KEY, JSON.stringify(fetchedList))
+//             localStorage.setItem(
+//               CITY_LIST_EXPIRES_KEY,
+//               (Date.now() + TTL).toString()
+//             )
+//           } catch {
+//             /* ignore storage errors */
+//           }
+//         }
+//       })
+//       .catch((err) => {
+//         console.error('Failed to load cities:', err)
+//       })
+
+//     // 2) Once we have our list, optionally promote IP-detected city
+//     fetch('https://ipwho.is/')
+//       .then((res) => res.json())
+//       .then((data) => {
+//         const detected = data.city?.toLowerCase()
+//         // only promote if it was in your fetchedList
+//         if (detected && fetchedList?.includes(detected)) {
+//           setCities((prev) => {
+//             // remove any existing occurrence
+//             const without = prev.filter((c) => c !== detected)
+//             // put detected city at front, leave rest already sorted
+//             return [detected, ...without]
+//           })
+//         }
+//       })
+//       .catch(() => {
+//         /* silent fallback */
+//       })
+//   }, [])
+
+//   return cities
+// }
+
+const DEFAULT_CITIES = [
+  "brampton",
+  "brandon",
+  "calgary",
+  "montreal",
+  "ottawa",
+  "scarborough",
+  "toronto",
+  "vancouver",
+  "waterloo",
+  "winnipeg",
+];
+
 export function useCities() {
-  const [cities, setCities] = useState(loadStoredCities)
+  const [cities, setCities] = useState(DEFAULT_CITIES);
 
   useEffect(() => {
-    let fetchedList = null
+    // 🔹 just wake the server — don't wait for response
+    api.get("cities/").catch(() => {});
 
-    // 1) Fetch the canonical city list
-    api.get('cities/')
-      .then((res) => {
-        const list = res.data
-        if (Array.isArray(list) && list.length > 0) {
-          // normalize to lowercase
-          fetchedList = list.map((c) => c.toLowerCase())
-          // sort alphabetically
-          fetchedList.sort((a, b) =>
-            a.localeCompare(b, undefined, { sensitivity: 'base' })
-          )
-          // update state → re-render dropdown
-          setCities(fetchedList)
-          // cache for next hard reload
-          try {
-            localStorage.setItem(CITY_LIST_KEY, JSON.stringify(fetchedList))
-            localStorage.setItem(
-              CITY_LIST_EXPIRES_KEY,
-              (Date.now() + TTL).toString()
-            )
-          } catch {
-            /* ignore storage errors */
-          }
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load cities:', err)
-      })
-
-    // 2) Once we have our list, optionally promote IP-detected city
-    fetch('https://ipwho.is/')
+    // 🔹 detect city via IP
+    fetch("https://ipwho.is/")
       .then((res) => res.json())
       .then((data) => {
-        const detected = data.city?.toLowerCase()
-        // only promote if it was in your fetchedList
-        if (detected && fetchedList?.includes(detected)) {
+        const detected = data.city?.toLowerCase();
+        if (detected && DEFAULT_CITIES.includes(detected)) {
           setCities((prev) => {
-            // remove any existing occurrence
-            const without = prev.filter((c) => c !== detected)
-            // put detected city at front, leave rest already sorted
-            return [detected, ...without]
-          })
+            const without = prev.filter((c) => c !== detected);
+            return [detected, ...without];
+          });
         }
       })
       .catch(() => {
         /* silent fallback */
-      })
-  }, [])
+      });
+  }, []);
 
-  return cities
+  return cities;
 }
